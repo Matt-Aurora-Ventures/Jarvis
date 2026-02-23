@@ -10,6 +10,8 @@ Focus:
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import os
@@ -17,6 +19,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 import requests
+from nacl.secret import SecretBox
+from nacl.utils import random as nacl_random
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +131,126 @@ class NosanaClient:
             return data
         return {"status": "unknown", "raw": data}
 
+    @staticmethod
+    def _estimate_required_vram_gb(model: str) -> int:
+        lowered = model.lower()
+        if "70b" in lowered or "72b" in lowered:
+            return 48
+        if "34b" in lowered or "32b" in lowered:
+            return 32
+        if "14b" in lowered or "13b" in lowered:
+            return 24
+        if "7b" in lowered or "8b" in lowered:
+            return 12
+        return 8
+
+    def submit_ollama_job(
+        self,
+        *,
+        template_path: Path,
+        model: str,
+        prompt: str,
+        market_id: Optional[str] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Submit an Ollama workload to Nosana and choose a market automatically.
+        """
+        selected_market: Optional[Dict[str, Any]] = None
+        selected_market_id = market_id
+        if not selected_market_id:
+            markets = self.list_markets()
+            selected_market = self.select_market(
+                markets,
+                required_vram_gb=self._estimate_required_vram_gb(model),
+            )
+            selected_market_id = str(
+                selected_market.get("id")
+                or selected_market.get("market")
+                or selected_market.get("market_id")
+                or ""
+            )
+
+        payload = self.build_job_payload(
+            template_path=template_path,
+            model=model,
+            prompt=prompt,
+            extra_input=extra_input,
+        )
+        if selected_market_id:
+            payload["market"] = selected_market_id
+
+        result = self.submit_job(payload)
+        result.setdefault("provider", "nosana")
+        result["selected_market"] = selected_market
+        result["market_id"] = selected_market_id
+        return result
+
+    @staticmethod
+    def _decode_sync_key(shared_key_hex: str) -> bytes:
+        key = bytes.fromhex(shared_key_hex)
+        if len(key) != SecretBox.KEY_SIZE:
+            raise ValueError("Sync key must be 32 bytes (64 hex chars)")
+        return key
+
+    def encrypt_sync_payload(self, payload: Mapping[str, Any], *, shared_key_hex: str) -> Dict[str, str]:
+        """
+        Encrypt mesh sync payloads before transport over NATS.
+        """
+        key = self._decode_sync_key(shared_key_hex)
+        box = SecretBox(key)
+        nonce = nacl_random(SecretBox.NONCE_SIZE)
+        plaintext = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        encrypted = box.encrypt(plaintext, nonce)
+        return {
+            "nonce_b64": base64.b64encode(nonce).decode("ascii"),
+            "ciphertext_b64": base64.b64encode(encrypted.ciphertext).decode("ascii"),
+        }
+
+    def decrypt_sync_payload(self, envelope: Mapping[str, str], *, shared_key_hex: str) -> Dict[str, Any]:
+        """
+        Decrypt mesh sync payload received from NATS.
+        """
+        key = self._decode_sync_key(shared_key_hex)
+        box = SecretBox(key)
+        nonce = base64.b64decode(str(envelope["nonce_b64"]))
+        ciphertext = base64.b64decode(str(envelope["ciphertext_b64"]))
+        plaintext = box.decrypt(ciphertext, nonce)
+        decoded = json.loads(plaintext.decode("utf-8"))
+        if not isinstance(decoded, dict):
+            raise ValueError("Decoded sync payload must be an object")
+        return decoded
+
+    @staticmethod
+    def state_hash(payload: Mapping[str, Any]) -> str:
+        """
+        Deterministic SHA-256 hash for Solana state attestation.
+        """
+        canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
+
+    def build_mesh_sync_envelope(
+        self,
+        *,
+        state_delta: Mapping[str, Any],
+        node_pubkey: str,
+        shared_key_hex: str,
+    ) -> Dict[str, Any]:
+        """
+        Build encrypted sync packet for NATS and Solana registry verification.
+        """
+        digest = self.state_hash(state_delta)
+        encrypted = self.encrypt_sync_payload(
+            {"state_delta": state_delta, "state_hash": digest},
+            shared_key_hex=shared_key_hex,
+        )
+        return {
+            "channel": "jarvis.mesh.sync",
+            "node_pubkey": node_pubkey,
+            "state_hash": digest,
+            "encrypted_payload": encrypted,
+        }
+
     async def run_heavy_workload(self, payload: Mapping[str, Any]) -> Dict[str, Any]:
         """
         Async helper for resilient provider integration.
@@ -142,4 +266,3 @@ def get_nosana_client() -> NosanaClient:
     if _nosana_client is None:
         _nosana_client = NosanaClient()
     return _nosana_client
-

@@ -30,9 +30,11 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_STATE_PATH = ROOT / "data" / "model_upgrader_state.json"
 DEFAULT_ARENA_PATH = ROOT / "core" / "consensus" / "arena.py"
+PRIMARY_CONFIG_PATH = ROOT / "lifeos" / "config" / "jarvis.json"
+LEGACY_CONFIG_PATH = ROOT / "lifeos" / "config" / "lifeos.config.json"
 DEFAULT_CONFIG_CANDIDATES = [
-    ROOT / "lifeos" / "config" / "jarvis.json",
-    ROOT / "lifeos" / "config" / "lifeos.config.json",
+    PRIMARY_CONFIG_PATH,
+    LEGACY_CONFIG_PATH,
 ]
 
 
@@ -116,6 +118,7 @@ class ModelUpgrader:
         self.state_path = state_path or DEFAULT_STATE_PATH
         self.arena_path = arena_path or DEFAULT_ARENA_PATH
         self.model_manager = model_manager or OllamaModelManager()
+        self._ensure_config_file_ready()
 
     @staticmethod
     def _parse_iso(ts: str) -> datetime:
@@ -134,6 +137,28 @@ class ModelUpgrader:
             if candidate.exists():
                 return candidate
         return DEFAULT_CONFIG_CANDIDATES[-1]
+
+    def _ensure_config_file_ready(self) -> None:
+        """
+        Ensure the configured file exists.
+
+        We prefer `lifeos/config/jarvis.json` and bootstrap it from
+        `lifeos.config.json` if needed.
+        """
+        if self.config_path.exists():
+            return
+
+        # If we're targeting jarvis.json and legacy config exists, clone it.
+        if self.config_path == PRIMARY_CONFIG_PATH and LEGACY_CONFIG_PATH.exists():
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            self.config_path.write_text(
+                LEGACY_CONFIG_PATH.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            return
+
+        # Fallback: create an empty JSON object.
+        self._save_json_file(self.config_path, {})
 
     def _load_json_file(self, path: Path, default: Any) -> Any:
         if not path.exists():
@@ -280,7 +305,38 @@ class ModelUpgrader:
                 )
             except Exception as exc:
                 logger.warning("Docker rollback tagging failed: %s", exc)
+        if changed:
+            self.log_event(
+                "rollback",
+                {"restored_model": previous_model, "config_path": str(self.config_path)},
+            )
         return changed
+
+    def graceful_restart(self) -> bool:
+        """
+        Trigger a graceful restart using a configurable command.
+
+        Configure with `JARVIS_RESTART_CMD`, for example:
+        `docker compose restart jarvis`
+        """
+        restart_cmd = os.getenv("JARVIS_RESTART_CMD", "").strip()
+        if not restart_cmd:
+            return False
+        try:
+            completed = subprocess.run(
+                restart_cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                logger.warning("Graceful restart command failed: %s", completed.stderr.strip())
+                return False
+            return True
+        except Exception as exc:
+            logger.warning("Graceful restart execution failed: %s", exc)
+            return False
 
     def scan_openrouter_frontier_models(self, *, timeout_seconds: int = 15) -> Dict[str, str]:
         """
@@ -310,14 +366,16 @@ class ModelUpgrader:
             if not model_id:
                 continue
             low = model_id.lower()
-            if "claude" in low and "claude_latest" not in found:
-                found["claude_latest"] = model_id
-            elif "grok" in low and "grok_latest" not in found:
-                found["grok_latest"] = model_id
-            elif "gemini" in low and "gemini_latest" not in found:
-                found["gemini_latest"] = model_id
-            elif ("gpt-5" in low or low.endswith("/o3") or "/o3-" in low) and "openai_latest" not in found:
-                found["openai_latest"] = model_id
+            if "claude" in low and "claude" not in found:
+                found["claude"] = model_id
+            elif "grok" in low and "grok" not in found:
+                found["grok"] = model_id
+            elif "gemini" in low and "gemini" not in found:
+                found["gemini"] = model_id
+            elif ("o3" in low or "/o3-" in low) and "o3" not in found:
+                found["o3"] = model_id
+            elif ("gpt-5" in low or "gpt-" in low) and "gpt" not in found:
+                found["gpt"] = model_id
         return found
 
     def update_arena_panel(self, additions: Mapping[str, str]) -> bool:
@@ -339,18 +397,23 @@ class ModelUpgrader:
             return False
 
         body = panel_match.group("body")
-        existing_keys = set(re.findall(r'"([^"]+)"\s*:\s*"[^"]+"', body))
-        new_lines = []
+        changed = False
         for alias, model_id in additions.items():
-            if alias in existing_keys:
-                continue
-            new_lines.append(f'    "{alias}": "{model_id}",')
+            alias_pattern = re.compile(rf'("{re.escape(alias)}"\s*:\s*")[^"]+(")')
+            if alias_pattern.search(body):
+                replaced = alias_pattern.sub(rf'\1{model_id}\2', body)
+                if replaced != body:
+                    body = replaced
+                    changed = True
+            else:
+                line = f'    "{alias}": "{model_id}",'
+                body = body + ("" if body.endswith("\n") else "\n") + line
+                changed = True
 
-        if not new_lines:
+        if not changed:
             return False
 
-        insert = ("\n" if not body.endswith("\n") else "") + "\n".join(new_lines)
-        updated = text[: panel_match.start("body")] + body + insert + text[panel_match.end("body") :]
+        updated = text[: panel_match.start("body")] + body + text[panel_match.end("body") :]
         self.arena_path.write_text(updated, encoding="utf-8")
         return True
 
@@ -389,23 +452,27 @@ class ModelUpgrader:
         """
         Execute one scan cycle with explicit candidate list.
         """
+        candidate_list = list(candidates)
         if not force and not self.should_run_weekly(now_iso=now_iso):
             return {"status": "skipped", "reason": "weekly_guard"}
 
         config = self._load_config()
         active_model = self._active_model_from_config(config)
         current_model = current
+        installed_models = self.model_manager.list_installed_models()
         if current_model is None and active_model:
-            current_model = ModelSpec(
-                name=active_model,
-                size_gb=0.0,
-                mmlu=0.0,
-                humaneval=0.0,
-                math=0.0,
-                tokens_per_second=0.0,
-            )
+            current_model = next((item for item in candidate_list if item.name == active_model), None)
+            if current_model is None:
+                current_model = ModelSpec(
+                    name=active_model,
+                    size_gb=0.0,
+                    mmlu=0.0,
+                    humaneval=0.0,
+                    math=0.0,
+                    tokens_per_second=0.0,
+                )
 
-        ranked = sorted(list(candidates), key=lambda c: (c.mmlu, c.humaneval, c.math), reverse=True)
+        ranked = sorted(candidate_list, key=lambda c: (c.mmlu, c.humaneval, c.math), reverse=True)
         if not ranked or current_model is None:
             frontier = self.scan_openrouter_frontier_models()
             panel_changed = self.update_arena_panel(frontier)
@@ -415,6 +482,7 @@ class ModelUpgrader:
                 "action": UpgradeAction.SKIP.value,
                 "reason": "insufficient_candidate_data",
                 "panel_updated": panel_changed,
+                "installed_models_count": len(installed_models),
             }
 
         best = ranked[0]
@@ -431,6 +499,7 @@ class ModelUpgrader:
             swapped = self.hot_swap_local_model(best.name) if pulled else False
             result["pulled"] = pulled
             result["swapped"] = swapped
+            result["restarted"] = self.graceful_restart() if swapped else False
         elif action == UpgradeAction.NOTIFY_HEAVIER:
             result["notify"] = (
                 f"Candidate {best.name} improved benchmarks but is heavier "
@@ -440,6 +509,7 @@ class ModelUpgrader:
         frontier = self.scan_openrouter_frontier_models()
         result["panel_updated"] = self.update_arena_panel(frontier)
         result["frontier_models_found"] = len(frontier)
+        result["installed_models_count"] = len(installed_models)
 
         self.mark_scan_complete(now_iso=now_iso)
         self.log_event("weekly_scan", result)
@@ -487,4 +557,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
