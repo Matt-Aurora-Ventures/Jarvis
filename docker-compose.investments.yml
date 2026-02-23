@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: jarvis-investments-db
+    environment:
+      POSTGRES_USER: jarvis
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-jarvis_dev}
+      POSTGRES_DB: jarvis_investments
+    ports:
+      - "5433:5432"
+    volumes:
+      - investments-pgdata:/var/lib/postgresql/data
+      - ./services/investments/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jarvis -d jarvis_investments"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    mem_limit: 1g
+
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-investments-redis
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"
+    volumes:
+      - investments-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    mem_limit: 512m
+
+  investment-orchestrator:
+    build:
+      context: .
+      dockerfile: services/investments/Dockerfile
+    container_name: jarvis-investments
+    environment:
+      - DATABASE_URL=postgresql://jarvis:${DB_PASSWORD:-jarvis_dev}@timescaledb:5432/jarvis_investments
+      - REDIS_URL=redis://redis:6379
+      - XAI_API_KEY=${XAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - BIRDEYE_API_KEY=${BIRDEYE_API_KEY:-}
+      - BASE_RPC_URL=${BASE_RPC_URL:-https://mainnet.base.org}
+      - MANAGEMENT_WALLET_KEY=${MANAGEMENT_WALLET_KEY:-}
+      - BASKET_ADDRESS=${BASKET_ADDRESS:-}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}
+      - SOLANA_WALLET_KEY=${SOLANA_WALLET_KEY:-}
+      - DRY_RUN=${DRY_RUN:-true}
+      - INVESTMENT_API_PORT=8770
+    ports:
+      - "8770:8770"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 2g
+
+volumes:
+  investments-pgdata:
+  investments-redis:

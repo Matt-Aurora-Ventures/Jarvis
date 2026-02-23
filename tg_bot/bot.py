@@ -22,6 +22,7 @@ from tg_bot.handlers.commands import start as start_cmd, help_command, status, s
 from tg_bot.handlers.commands.about_command import about_command
 from tg_bot.handlers.sentiment import trending, digest, report, sentiment, picks
 from tg_bot.handlers.admin import reload, config_cmd, logs, system, away, back, awaystatus, memory, sysmem, errors
+from tg_bot.handlers.investments import invest_status, kill_investments, resume_investments
 from tg_bot.handlers.trading import balance, positions, wallet, dashboard, button_callback, calibrate
 from tg_bot.handlers import treasury as treasury_handlers
 from tg_bot.handlers.sim_commands import sim, sim_buy, sim_sell, sim_pos
@@ -256,6 +257,9 @@ def register_handlers(app: Application, config) -> None:
     app.add_handler(CommandHandler("wallet", wallet_router))
     app.add_handler(CommandHandler("logs", logs))
     app.add_handler(CommandHandler("errors", errors))
+    app.add_handler(CommandHandler("invest_status", invest_status))
+    app.add_handler(CommandHandler("kill_investments", kill_investments))
+    app.add_handler(CommandHandler("resume_investments", resume_investments))
     app.add_handler(CommandHandler("away", away))
     app.add_handler(CommandHandler("back", back))
     app.add_handler(CommandHandler("awaystatus", awaystatus))
@@ -554,9 +558,11 @@ def main():
             """Clean up expired FSM sessions (memory fallback only)."""
             try:
                 storage = get_fsm_storage()
-                cleaned = await storage.cleanup_expired()
+                cleaned = await asyncio.wait_for(storage.cleanup_expired(), timeout=10.0)
                 if cleaned > 0:
                     print(f"FSM cleanup: removed {cleaned} expired sessions")
+            except asyncio.TimeoutError:
+                print("FSM cleanup: timed out after 10s (lock contention?)")
             except Exception as e:
                 print(f"FSM cleanup error: {e}")
 
@@ -576,6 +582,11 @@ def main():
     async def startup_tasks(app):
         print("[DEBUG] startup_tasks: ENTERED", flush=True)
         sys.stdout.flush()
+
+        # Clear any existing webhook FIRST — must run in async context (post_init)
+        # Prevents "Conflict: terminated by other getUpdates request" on startup
+        await _clear_webhook_before_polling(app)
+
         try:
             # Initialize health monitoring
             print("[DEBUG] startup_tasks: Importing health_monitor...")
@@ -617,29 +628,8 @@ def main():
     # NOTE: Lock is acquired above (stored in `lock` variable) only if SKIP_TELEGRAM_LOCK != "1"
     # When running under supervisor, lock is None and supervisor holds the lock instead
 
-    # Clear any existing webhook before starting polling
-    # This is CRITICAL to prevent "Conflict: terminated by other getUpdates request" errors
-    # TEMP FIX: Skip webhook clearing due to event loop issues - will be cleared by run_polling
-    try:
-        print("Clearing webhook before polling... (skipped - will clear on first poll)")
-        # asyncio.get_event_loop().run_until_complete(_clear_webhook_before_polling(app))
-    except Exception as e:
-        print(f"Webhook cleanup failed: {e} - continuing anyway")
-
-    # Pre-warm Dexter to eliminate cold start latency
-    # TEMP FIX: Skip pre-warming due to event loop issues - will warm on first use
-    try:
-        print("Pre-warming Dexter AI integration... (skipped - will warm on first use)")
-        # asyncio.get_event_loop().run_until_complete(_pre_warm_dexter())
-    except Exception as e:
-        print(f"Dexter pre-warming failed: {e} - continuing anyway")
-
-    # Run with drop_pending_updates to clear any stale connections
-    # This helps recover from Conflict errors caused by previous instances
-    # NOTE: run_polling's drop_pending_updates is different from delete_webhook's:
-    # - delete_webhook clears the server-side webhook and update queue
-    # - run_polling's drop_pending_updates only drops updates after polling starts
-    # Both are needed for clean startup
+    # Webhook clearing is now done in startup_tasks (post_init) which runs in the proper
+    # async context. run_polling's drop_pending_updates still helps drop stale queued updates.
     try:
         print("Starting Telegram polling...")
         app.run_polling(

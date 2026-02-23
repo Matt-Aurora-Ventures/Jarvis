@@ -1,0 +1,11 @@
+{
+  "tokens": {
+    "ALVA": {"weight": 0.10, "price_usd": 0.50, "liquidity_usd": 200000},
+    "WETH": {"weight": 0.25, "price_usd": 3200.00, "liquidity_usd": 5000000},
+    "cbBTC": {"weight": 0.20, "price_usd": 95000.00, "liquidity_usd": 3000000},
+    "USDC": {"weight": 0.15, "price_usd": 1.00, "liquidity_usd": 50000000},
+    "AERO": {"weight": 0.15, "price_usd": 1.80, "liquidity_usd": 500000},
+    "DEGEN": {"weight": 0.15, "price_usd": 0.012, "liquidity_usd": 300000}
+  },
+  "nav_usd": 200.00
+}

@@ -1,6 +1,6 @@
 import React from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { Home, MessageCircle, Settings, Search, Mic, TrendingUp, Bot, Map, Bell } from 'lucide-react'
+import { Home, MessageCircle, Settings, Search, Mic, TrendingUp, Bot, Map, Bell, PieChart } from 'lucide-react'
 import useJarvisStore from '../stores/jarvisStore'
 
 function Layout() {
@@ -51,6 +51,15 @@ function Layout() {
           >
             <TrendingUp size={18} />
             Trading
+          </NavLink>
+          <NavLink
+            to="/investments"
+            className={({ isActive }) =>
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
+            }
+          >
+            <PieChart size={18} />
+            Invest
           </NavLink>
           <NavLink
             to="/alerts"
