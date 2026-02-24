@@ -30,6 +30,7 @@ import { filterOpenPositionsForActiveWallet, filterTradeManagedOpenPositionsForA
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
 import { waitForSignatureStatus } from '@/lib/tx-confirmation';
 import { isProbablyMobile } from '@/lib/wallet-deeplinks';
+import { getSessionWalletCreationMode } from '@/lib/session-wallet-security';
 import {
   buildWrGateCandidates,
   gateStatusBadge,
@@ -244,6 +245,7 @@ export function SniperControls() {
   const [activatePerTrade, setActivatePerTrade] = useState('');
   const [activateAutoSnipe, setActivateAutoSnipe] = useState(true);
   const [activateError, setActivateError] = useState<string | null>(null);
+  const sessionWalletCreationMode = useMemo(() => getSessionWalletCreationMode(), []);
 
   // Safety watchdog: if Phantom/signature flows hang (popup blocked, route switch, extension bug),
   // sessionBusy can remain stuck and lock the entire session wallet UI. Auto-clear after 90s.
@@ -728,28 +730,36 @@ export function SniperControls() {
       let keypair: any = null;
       let shouldAutoDownload = true;
 
-      // Prefer deterministic (recoverable) session wallet when Phantom supports signMessage.
-      // If browser storage is cleared or pointers are overwritten, users can still recover by signing again.
-      try {
-        const message = getDeterministicSessionWalletMessage(mainAddress);
-        const signature = await withTimeout(signMessage(message), 60_000, 'Phantom sign message');
-        const derived = await deriveDeterministicSessionWallet(mainAddress, signature);
+      if (sessionWalletCreationMode === 'deterministic') {
+        // Explicit opt-in mode: derive recoverable wallet from a wallet signature.
+        // This intentionally reproduces the same session wallet for the same signer.
+        try {
+          const message = getDeterministicSessionWalletMessage(mainAddress);
+          const signature = await withTimeout(signMessage(message), 60_000, 'Phantom sign message');
+          const derived = await deriveDeterministicSessionWallet(mainAddress, signature);
 
-        const existed = !!(await loadSessionWalletByPublicKey(derived.publicKey, { mainWallet: mainAddress }));
-        const imported = await importSessionWalletSecretKey(
-          derived.keypair.secretKey,
-          mainAddress,
-          Date.now(),
-          'phantom_signMessage_v1',
-        );
+          const existed = !!(await loadSessionWalletByPublicKey(derived.publicKey, { mainWallet: mainAddress }));
+          const imported = await importSessionWalletSecretKey(
+            derived.keypair.secretKey,
+            mainAddress,
+            Date.now(),
+            'phantom_signMessage_v1',
+          );
 
-        pubkey = imported.publicKey;
-        keypair = imported.keypair;
+          pubkey = imported.publicKey;
+          keypair = imported.keypair;
 
-        // Avoid spamming downloads if this deterministic wallet already existed on this device.
-        shouldAutoDownload = !existed;
-      } catch {
-        // Fallback to legacy random wallet creation.
+          // Avoid spamming downloads if this deterministic wallet already existed on this device.
+          shouldAutoDownload = !existed;
+        } catch {
+          // If deterministic derivation fails, fall back to random creation.
+          const created = await createSessionWallet(mainAddress);
+          pubkey = created.publicKey;
+          keypair = created.keypair;
+          shouldAutoDownload = true;
+        }
+      } else {
+        // Security-first default: fresh random key each create.
         const created = await createSessionWallet(mainAddress);
         pubkey = created.publicKey;
         keypair = created.keypair;
@@ -1839,8 +1849,15 @@ export function SniperControls() {
                   <p className="text-[11px] text-text-muted/80 leading-relaxed">
                     Fund it with only what you can afford to lose. Jarvis auto-sweeps excess SOL back to your main wallet after exits, but this is <span className="font-semibold text-accent-warning">best-effort</span>.
                   </p>
+                  {sessionWalletCreationMode === 'deterministic' && (
+                    <p className="text-[11px] text-accent-warning/90 leading-relaxed font-semibold">
+                      Recoverable mode is enabled: the same main wallet signature derives the same session address each time.
+                    </p>
+                  )}
                   <p className="text-[11px] text-accent-error/90 leading-relaxed font-semibold">
-                    ALWAYS click &quot;Save Key&quot; after creating your wallet. The downloaded key file is the ONLY backup.
+                    ALWAYS click &quot;Save Key&quot; after creating your wallet. {sessionWalletCreationMode === 'deterministic'
+                      ? 'Keep a backup even in recoverable mode.'
+                      : 'The downloaded key file is the ONLY backup for random session wallets.'}
                   </p>
                 </div>
               </div>
