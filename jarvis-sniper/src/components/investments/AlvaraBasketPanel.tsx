@@ -8,7 +8,11 @@ function fmtUsd(v: number): string {
   return `$${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
-export function AlvaraBasketPanel() {
+type AlvaraBasketPanelProps = {
+  forceDisabledReason?: string | null;
+};
+
+export function AlvaraBasketPanel({ forceDisabledReason = null }: AlvaraBasketPanelProps = {}) {
   const {
     basket,
     performance,
@@ -24,6 +28,7 @@ export function AlvaraBasketPanel() {
   } = useInvestmentData();
 
   const [actionState, setActionState] = useState<string>('');
+  const featureDisabled = Boolean(forceDisabledReason);
 
   const perfDelta = useMemo(() => {
     if (performance.length < 2) return null;
@@ -36,6 +41,12 @@ export function AlvaraBasketPanel() {
 
   return (
     <div className="space-y-4">
+      {featureDisabled && (
+        <div className="rounded border border-accent-warning/40 bg-accent-warning/10 px-3 py-2 text-xs text-accent-warning">
+          {forceDisabledReason}
+        </div>
+      )}
+
       {error && (
         <div className="rounded border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-xs text-accent-error">
           {error}
@@ -77,7 +88,8 @@ export function AlvaraBasketPanel() {
             <h3 className="text-sm font-semibold text-text-primary">Basket Weights</h3>
             <button
               onClick={() => void refresh()}
-              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-muted"
+              disabled={featureDisabled}
+              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               Refresh
             </button>
@@ -117,6 +129,7 @@ export function AlvaraBasketPanel() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={async () => {
+                if (featureDisabled) return;
                 setActionState('Triggering cycle...');
                 try {
                   await triggerCycle();
@@ -126,12 +139,14 @@ export function AlvaraBasketPanel() {
                   setActionState(`Trigger failed: ${msg}`);
                 }
               }}
+              disabled={featureDisabled}
               className="rounded border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-300"
             >
               Trigger Cycle
             </button>
             <button
               onClick={async () => {
+                if (featureDisabled) return;
                 setActionState('Activating kill switch...');
                 try {
                   await activateKillSwitch();
@@ -141,12 +156,14 @@ export function AlvaraBasketPanel() {
                   setActionState(`Activation failed: ${msg}`);
                 }
               }}
+              disabled={featureDisabled}
               className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
             >
               Activate Kill Switch
             </button>
             <button
               onClick={async () => {
+                if (featureDisabled) return;
                 setActionState('Deactivating kill switch...');
                 try {
                   await deactivateKillSwitch();
@@ -156,6 +173,7 @@ export function AlvaraBasketPanel() {
                   setActionState(`Deactivation failed: ${msg}`);
                 }
               }}
+              disabled={featureDisabled}
               className="rounded border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs text-green-300"
             >
               Deactivate Kill Switch

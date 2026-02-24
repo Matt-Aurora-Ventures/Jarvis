@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useMemo, useState } from 'react';
 import { usePerpsData } from './usePerpsData';
@@ -15,7 +15,11 @@ function fmtPct(v: number | undefined): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
 }
 
-export function PerpsSniperPanel() {
+type PerpsSniperPanelProps = {
+  forceDisabledReason?: string | null;
+};
+
+export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPanelProps = {}) {
   const {
     prices,
     status,
@@ -44,7 +48,8 @@ export function PerpsSniperPanel() {
   const [slPct, setSlPct] = useState('5');
   const [orderState, setOrderState] = useState<string>('');
 
-  const canTrade = isArmed && isLive;
+  const featureDisabled = Boolean(forceDisabledReason);
+  const canTrade = !featureDisabled && isArmed && isLive;
 
   const runnerStatusLabel = useMemo(() => {
     if (!status) return 'Unknown';
@@ -54,6 +59,12 @@ export function PerpsSniperPanel() {
 
   return (
     <div className="space-y-4">
+      {featureDisabled && (
+        <div className="rounded border border-accent-warning/40 bg-accent-warning/10 px-3 py-2 text-xs text-accent-warning">
+          {forceDisabledReason}
+        </div>
+      )}
+
       {apiError && (
         <div className="rounded border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-xs text-accent-error">
           {apiError}
@@ -98,6 +109,7 @@ export function PerpsSniperPanel() {
               <button
                 key={m}
                 onClick={() => setMarket(m)}
+                disabled={featureDisabled}
                 className={`rounded border px-2 py-1 text-xs ${
                   market === m
                     ? 'border-accent-neon/40 bg-accent-neon/10 text-accent-neon'
@@ -112,16 +124,22 @@ export function PerpsSniperPanel() {
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               onClick={() => setSide('long')}
+              disabled={featureDisabled}
               className={`rounded border px-2 py-1 text-xs ${
-                side === 'long' ? 'border-green-500/50 bg-green-500/15 text-green-300' : 'border-border-primary bg-bg-tertiary text-text-muted'
+                side === 'long'
+                  ? 'border-green-500/50 bg-green-500/15 text-green-300'
+                  : 'border-border-primary bg-bg-tertiary text-text-muted'
               }`}
             >
               LONG
             </button>
             <button
               onClick={() => setSide('short')}
+              disabled={featureDisabled}
               className={`rounded border px-2 py-1 text-xs ${
-                side === 'short' ? 'border-red-500/50 bg-red-500/15 text-red-300' : 'border-border-primary bg-bg-tertiary text-text-muted'
+                side === 'short'
+                  ? 'border-red-500/50 bg-red-500/15 text-red-300'
+                  : 'border-border-primary bg-bg-tertiary text-text-muted'
               }`}
             >
               SHORT
@@ -136,6 +154,7 @@ export function PerpsSniperPanel() {
                 onChange={(e) => setCollateral(Number(e.target.value || 0))}
                 type="number"
                 min={10}
+                disabled={featureDisabled}
                 className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
               />
             </label>
@@ -147,6 +166,7 @@ export function PerpsSniperPanel() {
                 type="number"
                 min={1}
                 max={250}
+                disabled={featureDisabled}
                 className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
               />
             </label>
@@ -156,6 +176,7 @@ export function PerpsSniperPanel() {
                 value={tpPct}
                 onChange={(e) => setTpPct(e.target.value)}
                 type="number"
+                disabled={featureDisabled}
                 className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
               />
             </label>
@@ -165,6 +186,7 @@ export function PerpsSniperPanel() {
                 value={slPct}
                 onChange={(e) => setSlPct(e.target.value)}
                 type="number"
+                disabled={featureDisabled}
                 className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
               />
             </label>
@@ -175,6 +197,7 @@ export function PerpsSniperPanel() {
             disabled={!canTrade}
             className="mt-3 w-full rounded border border-accent-neon/40 bg-accent-neon/15 px-3 py-2 text-xs font-semibold text-accent-neon disabled:opacity-50"
             onClick={async () => {
+              if (featureDisabled) return;
               setOrderState('Submitting...');
               try {
                 await openPosition({
@@ -196,7 +219,11 @@ export function PerpsSniperPanel() {
           </button>
 
           {!canTrade && (
-            <p className="mt-2 text-xs text-accent-warning">Live order entry requires mode=LIVE and arm stage=ARMED.</p>
+            <p className="mt-2 text-xs text-accent-warning">
+              {featureDisabled
+                ? 'Perps action controls are disabled for this runtime.'
+                : 'Live order entry requires mode=LIVE and arm stage=ARMED.'}
+            </p>
           )}
 
           {orderState && <p className="mt-2 text-xs text-text-muted">{orderState}</p>}
@@ -207,7 +234,8 @@ export function PerpsSniperPanel() {
             <h3 className="text-sm font-semibold text-text-primary">Open Positions</h3>
             <button
               onClick={() => void refreshStatus()}
-              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-muted"
+              disabled={featureDisabled}
+              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               Refresh
             </button>
@@ -226,8 +254,10 @@ export function PerpsSniperPanel() {
                 <div className="mt-1 text-text-muted">Side: {String(p.side || '--')} | Size: ${Number(p.size_usd || 0).toFixed(2)}</div>
                 {p.pda && (
                   <button
-                    className="mt-2 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-300"
+                    disabled={featureDisabled}
+                    className="mt-2 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={async () => {
+                      if (featureDisabled) return;
                       try {
                         await closePosition(String(p.pda));
                         setOrderState(`Close intent queued for ${String(p.market || p.pda)}`);
@@ -262,3 +292,4 @@ export function PerpsSniperPanel() {
 }
 
 export default PerpsSniperPanel;
+

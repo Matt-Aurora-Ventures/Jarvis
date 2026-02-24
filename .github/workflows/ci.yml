@@ -46,6 +46,8 @@ jobs:
           else
             npm install --no-audit --no-fund
           fi
+      - name: Lint
+        run: npm run lint
       - name: Run distributed-state + store tests
         run: |
           npm run test -- \
@@ -53,8 +55,12 @@ jobs:
             src/lib/__tests__/rate-limit-provider.test.ts \
             src/lib/__tests__/server-cache.test.ts \
             src/stores/__tests__/useSniperStore.test.ts
+      - name: Run full test suite
+        run: npm run test
       - name: Build canonical frontend
         run: npm run build
+      - name: Run real-data-only backtest gate
+        run: npm run check:real-data-only
 
   prod-dependency-risk:
     name: Production Dependency Risk

@@ -1,5 +1,28 @@
 # Jarvis Roadmap
 
+## Phase 1-4 Algo Delivery Track (2026-02-24)
+
+This track is the current production hardening focus for Jarvis Sniper.
+
+1. Phase 1: PyTorch backtesting foundation
+- CoinGecko ingestion and dataset/model/tuning scaffolding under `core/backtest/`.
+
+2. Phase 2: Open Claw + Jupiter perps reliability
+- Signal engines and Wilson confidence gating under `core/open_claw/`.
+- Perps execution/reconciliation client path under `bots/jupiter_perps/`.
+
+3. Phase 3: Specialized snipers
+- TradFi feed + strategy mapper under `core/intel/` and `bots/tradfi_sniper/`.
+- Alvara allocator/client scaffolding under `bots/alvara_manager/`.
+
+4. Phase 4: CI/CD and release automation
+- Python logic gates in `.github/workflows/python-testing.yml`.
+- Deployment flow in `.github/workflows/deploy.yml` with production hardening checks.
+
+See:
+- `docs/operations/2026-02-24-phase14-claim-audit.md`
+- `docs/operations/2026-02-24-validation-matrix.md`
+
 **Created:** 2026-01-24
 **Updated:** 2026-02-02
 **Current Milestone:** V2 - Combined Scope (ClawdBot Evolution + Web Trading)
