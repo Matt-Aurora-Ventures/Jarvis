@@ -116,3 +116,73 @@ def test_mesh_sync_envelope_encrypts_and_decrypts_state_delta():
     )
     assert decrypted["state_delta"] == state_delta
     assert decrypted["state_hash"] == envelope["state_hash"]
+
+
+def test_validate_mesh_sync_envelope_rejects_hash_mismatch():
+    client = NosanaClient(api_key="test-key")
+    shared_key_hex = "22" * 32
+    envelope = client.build_mesh_sync_envelope(
+        state_delta={"focus": "consensus"},
+        node_pubkey="Node111111111111111111111111111111111111",
+        shared_key_hex=shared_key_hex,
+    )
+    envelope["state_hash"] = "0" * 64
+
+    result = client.validate_mesh_sync_envelope(envelope, shared_key_hex=shared_key_hex)
+    assert result["valid"] is False
+    assert result["reason"] == "hash_mismatch"
+
+
+def test_validate_mesh_sync_envelope_rejects_stale_commitment():
+    client = NosanaClient(api_key="test-key")
+    shared_key_hex = "33" * 32
+    envelope = client.build_mesh_sync_envelope(
+        state_delta={"focus": "mesh"},
+        node_pubkey="Node111111111111111111111111111111111111",
+        shared_key_hex=shared_key_hex,
+        issued_at="2026-02-23T00:00:00+00:00",
+        ttl_seconds=60,
+    )
+
+    result = client.validate_mesh_sync_envelope(
+        envelope,
+        shared_key_hex=shared_key_hex,
+        now_iso="2026-02-23T00:02:01+00:00",
+    )
+    assert result["valid"] is False
+    assert result["reason"] == "stale_commitment"
+
+
+def test_validate_mesh_sync_envelope_rejects_replay():
+    client = NosanaClient(api_key="test-key")
+    shared_key_hex = "44" * 32
+    envelope = client.build_mesh_sync_envelope(
+        state_delta={"focus": "replay-guard"},
+        node_pubkey="Node111111111111111111111111111111111111",
+        shared_key_hex=shared_key_hex,
+    )
+
+    first = client.validate_mesh_sync_envelope(envelope, shared_key_hex=shared_key_hex)
+    second = client.validate_mesh_sync_envelope(envelope, shared_key_hex=shared_key_hex)
+
+    assert first["valid"] is True
+    assert second["valid"] is False
+    assert second["reason"] == "replay_detected"
+
+
+def test_validate_mesh_sync_envelope_rejects_partial_sync_payload():
+    client = NosanaClient(api_key="test-key")
+    shared_key_hex = "55" * 32
+    envelope = client.build_mesh_sync_envelope(
+        state_delta={"focus": "partial-sync"},
+        node_pubkey="Node111111111111111111111111111111111111",
+        shared_key_hex=shared_key_hex,
+    )
+    envelope["encrypted_payload"] = client.encrypt_sync_payload(
+        {"state_hash": envelope["state_hash"]},
+        shared_key_hex=shared_key_hex,
+    )
+
+    result = client.validate_mesh_sync_envelope(envelope, shared_key_hex=shared_key_hex)
+    assert result["valid"] is False
+    assert result["reason"] == "partial_sync_data"

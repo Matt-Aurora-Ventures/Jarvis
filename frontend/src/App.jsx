@@ -13,18 +13,19 @@ import Research from '@/pages/Research'
 import VoiceControl from '@/pages/VoiceControl'
 import Roadmap from '@/pages/Roadmap'
 import Alerts from '@/pages/Alerts'
+import AIControlPlane from '@/pages/AIControlPlane'
 
 /**
  * JARVIS Dashboard - Main Application Router
  *
  * Routes:
- * - /           → Dashboard (system overview, stats, activity)
- * - /trading    → Trading Command Center (full-screen, own nav)
- * - /chat       → Full-page Jarvis conversation
- * - /voice      → Voice control interface
- * - /research   → Research tools
- * - /settings   → System configuration
- * - /roadmap    → Development roadmap
+ * - /           -> Dashboard (system overview, stats, activity)
+ * - /trading    -> Trading Command Center (full-screen, own nav)
+ * - /chat       -> Full-page Jarvis conversation
+ * - /voice      -> Voice control interface
+ * - /research   -> Research tools
+ * - /settings   -> System configuration
+ * - /roadmap    -> Development roadmap
  */
 function App() {
   return (
@@ -46,6 +47,9 @@ function App() {
 
           {/* Research Tools */}
           <Route path="research" element={<Research />} />
+
+          {/* AI Control Plane */}
+          <Route path="ai-control" element={<AIControlPlane />} />
 
           {/* Settings */}
           <Route path="settings" element={<Settings />} />

@@ -39,6 +39,10 @@ pub mod jarvis_mesh {
         expected_hash: [u8; 32],
     ) -> Result<()> {
         require!(
+            ctx.accounts.state_commitment.node == ctx.accounts.node_registry.key(),
+            MeshError::InvalidCommitmentOwner
+        );
+        require!(
             ctx.accounts.state_commitment.state_hash == expected_hash,
             MeshError::HashMismatch
         );
@@ -77,7 +81,7 @@ pub struct CommitStateHash<'info> {
     pub node_registry: Account<'info, NodeRegistry>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         space = StateCommitment::LEN,
         seeds = [b"commitment", node_registry.key().as_ref()],
@@ -127,6 +131,8 @@ impl StateCommitment {
 pub enum MeshError {
     #[msg("Invalid endpoint")]
     InvalidEndpoint,
+    #[msg("State commitment owner mismatch")]
+    InvalidCommitmentOwner,
     #[msg("State hash mismatch")]
     HashMismatch,
 }

@@ -23,6 +23,7 @@
 - [The Architecture: A Mesh of Smart Agents](#-the-architecture-a-mesh-of-smart-agents)
 - [Economic Model: Open Source First](#-economic-model-open-source-first)
 - [What Jarvis Does Today](#-what-jarvis-does-today)
+- [Consensus + Context + Mesh (Feb 2026)](#-consensus--context--mesh-feb-2026)
 - [Core Capabilities](#-core-capabilities)
 - [Quick Start](#-quick-start)
 - [Documentation & Legacy Docs](#-documentation--legacy-docs)
@@ -326,6 +327,46 @@ While the vision is expansive, Jarvis is already **operational and generating va
 - **Risk-tiered position sizing** (ESTABLISHED, MID, MICRO, SHITCOIN)
 - **Active stop loss monitoring** (checks every 60 seconds)
 - **$KR8TIV staking**: Earn SOL from trading profits
+
+---
+
+## 🧠 Consensus + Context + Mesh (Feb 2026)
+
+Jarvis now includes a production-grade consensus and context stack with explicit degraded-mode behavior.
+
+### Consensus Arena
+- `core/consensus/scoring.py`: hybrid scoring (semantic agreement + reasoning heuristics + confidence extraction + model priors).
+- `core/consensus/arena.py`: async fan-out to model panel via LiteLLM/OpenRouter with consensus synthesis.
+- `core/resilient_provider.py`: consensus route integrated with graceful fallback to local Ollama.
+- `bots/supervisor.py`: startup capability warnings for missing dependencies/flags.
+
+### Supermemory Lifecycle Hooks
+- `bots/shared/supermemory_client.py` now supports pre-recall and post-response hooks.
+- Dual-profile prompt injection is wired into `lifeos/jarvis.py`:
+  - Static profile (long-term preferences).
+  - Dynamic profile (recent focus/context).
+- Research notebook writes are tagged (`container_tag=\"research_notebooks\"`).
+
+### Mesh Sync + Attestation
+- `services/compute/mesh_sync_service.py`: post-write state delta emission, envelope validation, and retryable outbox.
+- `services/compute/mesh_attestation_service.py`: Solana state-hash attestation interface.
+- Supermemory write success now triggers: `publish -> validate -> attest` (non-blocking to user writes).
+- Integration test coverage includes mocked NATS + mocked Solana RPC for end-to-end mesh flow.
+
+### Control Plane + Capability Truth
+- `core/ai_control_plane.py` and `/api/ai/control-plane` provide operator snapshot for consensus, context, upgrader, and compute.
+- `core/roadmap_capabilities.py` + `/api/roadmap/capabilities` drive roadmap status from implementation evidence.
+- `frontend/src/pages/AIControlPlane.jsx` and `frontend/src/pages/Roadmap.jsx` render status-first operational views.
+
+### Phase 5/6 Operational Feeds
+- New backend feeds and routes for Advanced Tools and Polish & Scale:
+  - `/api/advanced/mev`
+  - `/api/advanced/multi-dex`
+  - `/api/advanced/perps/status`
+  - `/api/analytics/portfolio`
+  - `/api/runtime/capabilities`
+  - `/api/polish/themes/status`
+  - `/api/polish/onboarding/status`
 
 ---
 
@@ -1448,6 +1489,20 @@ GET  /user/history        # Action history
 GET  /user/stats          # User statistics
 ```
 
+#### Control Plane & Runtime (New)
+
+```
+GET  /api/ai/control-plane          # Consensus/context/upgrader/compute control-plane snapshot
+GET  /api/roadmap/capabilities      # Capability-truth roadmap matrix
+GET  /api/runtime/capabilities      # Runtime degraded-mode capability report
+GET  /api/advanced/mev              # MEV feed and protection recommendations
+GET  /api/advanced/multi-dex        # Multi-DEX quote comparison + best route
+GET  /api/advanced/perps/status     # Perps production-readiness status
+GET  /api/analytics/portfolio       # Portfolio analytics (PnL, win rate, drawdown)
+GET  /api/polish/themes/status      # Theme system readiness
+GET  /api/polish/onboarding/status  # Onboarding flow readiness
+```
+
 ### Rate Limits
 
 | Tier | Requests/min | Burst |
@@ -1714,6 +1769,25 @@ TELEGRAM_BOT_ENABLED=true
 VOICE_CONTROL_ENABLED=false
 WEB_DASHBOARD_ENABLED=true
 
+# Consensus/context/compute routing
+JARVIS_USE_ARENA=1
+JARVIS_SUPERMEMORY_HOOKS=1
+JARVIS_USE_NOSANA=0
+
+# Mesh sync + attestation
+JARVIS_USE_MESH_SYNC=0
+JARVIS_USE_MESH_ATTEST=0
+NATS_URL=nats://localhost:4222
+NATS_SUBJECT_MESH_SYNC=jarvis.mesh.sync
+JARVIS_MESH_SYNC_KEY=
+JARVIS_MESH_NODE_PUBKEY=
+JARVIS_MESH_PROGRAM_ID=
+JARVIS_MESH_OUTBOX_PATH=data/mesh/outbox.jsonl
+
+# Model upgrader
+JARVIS_MODEL_UPGRADER_ENABLED=1
+JARVIS_RESTART_CMD=
+
 # Safety features
 REQUIRE_ADMIN_FOR_TRADES=true
 ENABLE_CIRCUIT_BREAKERS=true
@@ -1816,6 +1890,30 @@ curl http://localhost:8080/metrics
 ---
 
 ## 📋 Recent Updates
+
+### 🚀 v4.7.1 - February 24, 2026
+
+#### Consensus, Context, Mesh Attestation, and Roadmap Phase 5/6 Closure
+
+**Consensus + Context hardening:**
+- Consensus arena integrated as a first-class route with scoring and synthesis.
+- Supermemory pre-recall and post-response hooks wired into runtime prompt lifecycle.
+- Dual-profile context injection (static + dynamic) in core Jarvis runtime.
+
+**Mesh lifecycle integration:**
+- Post-write supermemory lifecycle now supports mesh sync + attestation stages.
+- Retryable outbox semantics for publish/commit failures (user writes stay non-blocking).
+- Integration coverage for `sync -> validate -> attest` with mocked NATS and Solana RPC.
+
+**Operator control plane and capability truth:**
+- Added AI Control Plane endpoint/UI and runtime capability reports.
+- Added roadmap capability matrix endpoint/UI based on implementation evidence.
+- Added degraded-mode runbook docs and startup capability warnings.
+
+**Roadmap phases 5 and 6 promoted:**
+- Advanced feeds: MEV, multi-DEX routing, perps readiness, portfolio analytics.
+- Polish feeds: runtime capability report, themes readiness, onboarding readiness.
+- Mobile nav, theme toggle wiring, and onboarding coach integrated in primary layout.
 
 ### 🚀 v4.6.6 - January 27, 2026
 
@@ -1935,6 +2033,7 @@ Full changelog: [CHANGELOG.md](CHANGELOG.md)
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **4.7.1** | Feb 24, 2026 | Consensus/context/mesh attestation lifecycle, AI control plane + capability roadmap APIs, advanced-tools and polish feeds |
 | **4.7.0** | Feb 5, 2026 | ClawdBots multi-agent mesh, P2P self-healing, Supermemory integration, Docker orchestration, 50+ shared modules, web terminal |
 | **4.6.6** | Jan 27, 2026 | Provider chain failover, model routing improvements |
 | **4.6.5** | Jan 21, 2026 | V1 stabilization, critical bug fixes |
@@ -1948,6 +2047,19 @@ Full changelog: [CHANGELOG.md](CHANGELOG.md)
 ---
 
 ## 🗺️ Roadmap
+
+### Execution Status (Capability-Truth Snapshot, Feb 24, 2026)
+
+- Trading Core: **Live**
+- Sentinel Mode: **Live**
+- Intelligence Layer: **Live**
+- LifeOS Integration: **Live**
+- Advanced Tools: **Live**
+- Polish & Scale: **Live**
+
+Source of truth:
+- `GET /api/roadmap/capabilities`
+- `frontend/src/pages/Roadmap.jsx`
 
 ### Q1 2026 ✅ (Complete)
 

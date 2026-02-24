@@ -20,6 +20,9 @@ def test_resilient_provider_chain_includes_nosana_route():
 @pytest.mark.asyncio
 async def test_execute_consensus_delegates_to_arena(monkeypatch):
     chain = ResilientProviderChain()
+    monkeypatch.setenv("JARVIS_USE_ARENA", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr("core.resilient_provider.module_available", lambda _name: True)
 
     async def _fake_get_consensus(query, **_kwargs):
         return {"route": "arena", "consensus": {"model": "claude", "content": query}}
@@ -42,8 +45,23 @@ async def test_execute_consensus_respects_arena_toggle(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_execute_consensus_degrades_when_litellm_missing(monkeypatch):
+    chain = ResilientProviderChain()
+    monkeypatch.setenv("JARVIS_USE_ARENA", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr("core.resilient_provider.module_available", lambda _name: False)
+
+    result = await chain.execute_consensus("compare staking and lp")
+    assert result["route"] == "local"
+    assert result["reason"] == "litellm_missing"
+    assert result["fallback"] == "local_ollama"
+
+
+@pytest.mark.asyncio
 async def test_execute_nosana_delegates_to_client(monkeypatch):
     chain = ResilientProviderChain()
+    monkeypatch.setenv("JARVIS_USE_NOSANA", "1")
+    monkeypatch.setenv("NOSANA_API_KEY", "test-key")
 
     class _DummyNosanaClient:
         is_configured = True
@@ -59,3 +77,13 @@ async def test_execute_nosana_delegates_to_client(monkeypatch):
     result = await chain.execute_nosana({"task": "consensus", "prompt": "compare routes"})
     assert result["provider"] == "nosana"
     assert result["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_execute_nosana_disabled_by_default(monkeypatch):
+    chain = ResilientProviderChain()
+    monkeypatch.delenv("JARVIS_USE_NOSANA", raising=False)
+
+    result = await chain.execute_nosana({"task": "consensus", "prompt": "compare routes"})
+    assert result["provider"] == "nosana"
+    assert result["status"] == "disabled"

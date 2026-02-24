@@ -1,389 +1,182 @@
-import React, { useState, useMemo, useEffect } from 'react'
-import {
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
-  RefreshCw,
-  Settings,
-  ZoomIn,
-  ZoomOut,
-  Layers,
-  AlertTriangle,
-  DollarSign,
-  Activity,
-  Eye,
-  ArrowUp,
-  ArrowDown,
-  Target
-} from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, BarChart3, Eye, EyeOff, RefreshCw } from 'lucide-react'
+
+const TOKENS = ['SOL', 'ETH', 'BTC', 'JUP', 'BONK', 'WIF', 'RNDR', 'PYTH']
+
+function formatPrice(value) {
+  if (!Number.isFinite(value)) return '--'
+  if (value >= 1000) return value.toFixed(2)
+  if (value >= 1) return value.toFixed(4)
+  return value.toFixed(8)
+}
+
+function formatSize(value) {
+  if (!Number.isFinite(value)) return '--'
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`
+  return value.toFixed(2)
+}
 
 export function DepthChart() {
-  const [selectedToken, setSelectedToken] = useState('SOL')
-  const [zoomLevel, setZoomLevel] = useState(5) // percentage from mid
-  const [showOrders, setShowOrders] = useState(true)
+  const [symbol, setSymbol] = useState('SOL')
+  const [levels, setLevels] = useState(20)
+  const [showBook, setShowBook] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [snapshot, setSnapshot] = useState(null)
+  const [error, setError] = useState(null)
 
-  const tokens = ['SOL', 'ETH', 'BTC', 'BONK', 'WIF', 'JUP', 'RNDR', 'PYTH', 'JTO', 'RAY']
-
-  // Generate mock order book data
-  const orderBookData = useMemo(() => {
-    const midPrice = selectedToken === 'SOL' ? 178.50 :
-                     selectedToken === 'ETH' ? 3456.00 :
-                     selectedToken === 'BTC' ? 67500.00 :
-                     Math.random() * 100 + 1
-
-    const spread = midPrice * 0.0005
-    const bidPrice = midPrice - spread / 2
-    const askPrice = midPrice + spread / 2
-
-    // Generate bids (buy orders) - decreasing prices
-    const bids = Array.from({ length: 50 }, (_, i) => {
-      const priceOffset = (i + 1) * (midPrice * 0.001)
-      const price = bidPrice - priceOffset
-      const size = Math.random() * 1000 + 50
-      const total = size * price
-
-      return {
-        price,
-        size,
-        total,
-        cumulative: 0 // Will calculate
-      }
-    })
-
-    // Calculate cumulative for bids
-    let cumBid = 0
-    bids.forEach(bid => {
-      cumBid += bid.size
-      bid.cumulative = cumBid
-    })
-
-    // Generate asks (sell orders) - increasing prices
-    const asks = Array.from({ length: 50 }, (_, i) => {
-      const priceOffset = (i + 1) * (midPrice * 0.001)
-      const price = askPrice + priceOffset
-      const size = Math.random() * 1000 + 50
-      const total = size * price
-
-      return {
-        price,
-        size,
-        total,
-        cumulative: 0 // Will calculate
-      }
-    })
-
-    // Calculate cumulative for asks
-    let cumAsk = 0
-    asks.forEach(ask => {
-      cumAsk += ask.size
-      ask.cumulative = cumAsk
-    })
-
-    // Find walls (large orders)
-    const avgBidSize = bids.reduce((sum, b) => sum + b.size, 0) / bids.length
-    const avgAskSize = asks.reduce((sum, a) => sum + a.size, 0) / asks.length
-
-    const bidWalls = bids.filter(b => b.size > avgBidSize * 3).slice(0, 3)
-    const askWalls = asks.filter(a => a.size > avgAskSize * 3).slice(0, 3)
-
-    return {
-      midPrice,
-      bidPrice,
-      askPrice,
-      spread,
-      spreadPercent: (spread / midPrice * 100).toFixed(4),
-      bids,
-      asks,
-      bidWalls,
-      askWalls,
-      totalBidLiquidity: bids.reduce((sum, b) => sum + b.total, 0),
-      totalAskLiquidity: asks.reduce((sum, a) => sum + a.total, 0),
-      imbalance: ((bids.reduce((sum, b) => sum + b.size, 0) - asks.reduce((sum, a) => sum + a.size, 0)) /
-                 (bids.reduce((sum, b) => sum + b.size, 0) + asks.reduce((sum, a) => sum + a.size, 0)) * 100)
-    }
-  }, [selectedToken])
-
-  // Filter data based on zoom level
-  const visibleData = useMemo(() => {
-    const priceRange = orderBookData.midPrice * (zoomLevel / 100)
-    const minPrice = orderBookData.midPrice - priceRange
-    const maxPrice = orderBookData.midPrice + priceRange
-
-    return {
-      bids: orderBookData.bids.filter(b => b.price >= minPrice),
-      asks: orderBookData.asks.filter(a => a.price <= maxPrice)
-    }
-  }, [orderBookData, zoomLevel])
-
-  const maxCumulative = Math.max(
-    visibleData.bids.length ? visibleData.bids[visibleData.bids.length - 1].cumulative : 0,
-    visibleData.asks.length ? visibleData.asks[visibleData.asks.length - 1].cumulative : 0
-  )
-
-  const handleRefresh = () => {
+  const fetchDepth = useCallback(async () => {
     setIsRefreshing(true)
-    setTimeout(() => setIsRefreshing(false), 500)
-  }
+    try {
+      const response = await fetch(`/api/market/depth?symbol=${symbol}&levels=${levels}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const payload = await response.json()
+      setSnapshot(payload)
+      setError(null)
+    } catch (err) {
+      setError(err?.message || 'Failed to load market depth')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [symbol, levels])
 
-  const formatPrice = (price) => {
-    if (price >= 1000) return price.toFixed(2)
-    if (price >= 1) return price.toFixed(4)
-    return price.toFixed(6)
-  }
+  useEffect(() => {
+    fetchDepth()
+    const timer = setInterval(fetchDepth, 5000)
+    return () => clearInterval(timer)
+  }, [fetchDepth])
 
-  const formatNumber = (num) => {
-    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B'
-    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M'
-    if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K'
-    return num.toFixed(2)
-  }
+  const visibleBids = useMemo(() => (snapshot?.bids || []).slice(0, 15), [snapshot])
+  const visibleAsks = useMemo(() => (snapshot?.asks || []).slice(0, 15), [snapshot])
+  const maxVisibleSize = useMemo(() => {
+    const firstBid = visibleBids[0]?.size || 0
+    const firstAsk = visibleAsks[0]?.size || 0
+    return Math.max(firstBid, firstAsk, 1)
+  }, [visibleBids, visibleAsks])
 
   return (
     <div className="bg-[#0a0e14] rounded-xl border border-white/10 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <BarChart3 className="w-6 h-6 text-cyan-400" />
-          <h2 className="text-xl font-bold text-white">Depth Chart</h2>
+          <div>
+            <h2 className="text-xl font-bold text-white">Depth Chart</h2>
+            <p className="text-xs text-gray-500">Source: {snapshot?.source || 'unknown'}</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <select
-            value={selectedToken}
-            onChange={(e) => setSelectedToken(e.target.value)}
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
             className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
           >
-            {tokens.map(token => (
-              <option key={token} value={token}>{token}/USDC</option>
+            {TOKENS.map((token) => (
+              <option key={token} value={token}>
+                {token}/USDC
+              </option>
+            ))}
+          </select>
+          <select
+            value={levels}
+            onChange={(e) => setLevels(Number(e.target.value))}
+            className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+          >
+            {[10, 20, 30, 40].map((count) => (
+              <option key={count} value={count}>
+                {count} levels
+              </option>
             ))}
           </select>
           <button
-            onClick={handleRefresh}
+            onClick={fetchDepth}
             className={`p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 ${isRefreshing ? 'animate-spin' : ''}`}
+            title="Refresh"
           >
             <RefreshCw className="w-4 h-4 text-gray-400" />
           </button>
-        </div>
-      </div>
-
-      {/* Price Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-          <div className="text-gray-400 text-xs">Mid Price</div>
-          <div className="text-lg font-bold text-white">${formatPrice(orderBookData.midPrice)}</div>
-        </div>
-        <div className="bg-green-500/10 rounded-lg p-3 border border-green-500/20">
-          <div className="text-gray-400 text-xs">Best Bid</div>
-          <div className="text-lg font-bold text-green-400">${formatPrice(orderBookData.bidPrice)}</div>
-        </div>
-        <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/20">
-          <div className="text-gray-400 text-xs">Best Ask</div>
-          <div className="text-lg font-bold text-red-400">${formatPrice(orderBookData.askPrice)}</div>
-        </div>
-        <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-          <div className="text-gray-400 text-xs">Spread</div>
-          <div className="text-lg font-bold text-white">{orderBookData.spreadPercent}%</div>
-        </div>
-        <div className={`rounded-lg p-3 border ${orderBookData.imbalance >= 0 ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
-          <div className="text-gray-400 text-xs">Imbalance</div>
-          <div className={`text-lg font-bold ${orderBookData.imbalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {orderBookData.imbalance >= 0 ? '+' : ''}{orderBookData.imbalance.toFixed(2)}%
-          </div>
-        </div>
-      </div>
-
-      {/* Zoom Controls */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
           <button
-            onClick={() => setZoomLevel(Math.max(1, zoomLevel - 1))}
-            className="p-2 bg-white/5 rounded-lg hover:bg-white/10"
+            onClick={() => setShowBook((current) => !current)}
+            className="p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10"
+            title={showBook ? 'Hide order book' : 'Show order book'}
           >
-            <ZoomIn className="w-4 h-4 text-gray-400" />
+            {showBook ? <Eye className="w-4 h-4 text-cyan-400" /> : <EyeOff className="w-4 h-4 text-gray-400" />}
           </button>
-          <input
-            type="range"
-            min="1"
-            max="20"
-            value={zoomLevel}
-            onChange={(e) => setZoomLevel(Number(e.target.value))}
-            className="w-32"
+        </div>
+      </div>
+
+      {error ? (
+        <div className="mb-4 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-yellow-300 text-sm flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" />
+          {error}
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+        <StatCard label="Mid Price" value={`$${formatPrice(snapshot?.mid_price)}`} />
+        <StatCard label="Best Bid" value={`$${formatPrice(snapshot?.best_bid)}`} color="text-green-400" />
+        <StatCard label="Best Ask" value={`$${formatPrice(snapshot?.best_ask)}`} color="text-red-400" />
+        <StatCard label="Spread %" value={`${Number(snapshot?.spread_pct || 0).toFixed(4)}%`} />
+        <StatCard
+          label="Imbalance"
+          value={`${Number(snapshot?.imbalance_pct || 0).toFixed(2)}%`}
+          color={Number(snapshot?.imbalance_pct || 0) >= 0 ? 'text-green-400' : 'text-red-400'}
+        />
+      </div>
+
+      {showBook ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <BookColumn
+            title="Bids"
+            titleColor="text-green-400"
+            rows={visibleBids}
+            maxSize={maxVisibleSize}
+            side="bid"
           />
-          <button
-            onClick={() => setZoomLevel(Math.min(20, zoomLevel + 1))}
-            className="p-2 bg-white/5 rounded-lg hover:bg-white/10"
-          >
-            <ZoomOut className="w-4 h-4 text-gray-400" />
-          </button>
-          <span className="text-gray-400 text-sm ml-2">{zoomLevel}%</span>
+          <BookColumn
+            title="Asks"
+            titleColor="text-red-400"
+            rows={visibleAsks}
+            maxSize={maxVisibleSize}
+            side="ask"
+          />
         </div>
-        <button
-          onClick={() => setShowOrders(!showOrders)}
-          className={`p-2 rounded-lg ${showOrders ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-gray-400'}`}
-        >
-          <Eye className="w-4 h-4" />
-        </button>
-      </div>
+      ) : null}
+    </div>
+  )
+}
 
-      {/* Depth Chart Visualization */}
-      <div className="bg-white/5 rounded-lg p-4 border border-white/10 mb-6">
-        <div className="h-64 flex relative">
-          {/* Bid Side (Left) */}
-          <div className="flex-1 relative flex flex-col">
-            <div className="flex-1 relative">
-              {visibleData.bids.map((bid, i) => {
-                const width = (bid.cumulative / maxCumulative) * 100
-                return (
-                  <div
-                    key={i}
-                    className="absolute right-0 bg-green-500/30 border-r border-green-500"
-                    style={{
-                      width: `${width}%`,
-                      height: '4px',
-                      bottom: `${(i / visibleData.bids.length) * 100}%`
-                    }}
-                  />
-                )
-              })}
-            </div>
-            <div className="text-center text-green-400 text-sm mt-2">
-              Bids: ${formatNumber(orderBookData.totalBidLiquidity)}
-            </div>
-          </div>
+function StatCard({ label, value, color = 'text-white' }) {
+  return (
+    <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+      <div className="text-gray-400 text-xs">{label}</div>
+      <div className={`text-lg font-bold ${color}`}>{value}</div>
+    </div>
+  )
+}
 
-          {/* Mid Line */}
-          <div className="w-px bg-white/20 relative">
-            <div className="absolute -left-8 -top-2 text-xs text-gray-400">
-              ${formatPrice(orderBookData.midPrice * (1 + zoomLevel / 100))}
-            </div>
-            <div className="absolute -left-8 top-1/2 -translate-y-1/2 px-2 py-1 bg-white/10 rounded text-white text-sm">
-              ${formatPrice(orderBookData.midPrice)}
-            </div>
-            <div className="absolute -left-8 -bottom-2 text-xs text-gray-400">
-              ${formatPrice(orderBookData.midPrice * (1 - zoomLevel / 100))}
-            </div>
-          </div>
-
-          {/* Ask Side (Right) */}
-          <div className="flex-1 relative flex flex-col">
-            <div className="flex-1 relative">
-              {visibleData.asks.map((ask, i) => {
-                const width = (ask.cumulative / maxCumulative) * 100
-                return (
-                  <div
-                    key={i}
-                    className="absolute left-0 bg-red-500/30 border-l border-red-500"
-                    style={{
-                      width: `${width}%`,
-                      height: '4px',
-                      bottom: `${(i / visibleData.asks.length) * 100}%`
-                    }}
-                  />
-                )
-              })}
-            </div>
-            <div className="text-center text-red-400 text-sm mt-2">
-              Asks: ${formatNumber(orderBookData.totalAskLiquidity)}
-            </div>
-          </div>
+function BookColumn({ title, titleColor, rows, maxSize, side }) {
+  const backgroundColor = side === 'bid' ? 'bg-green-500/10' : 'bg-red-500/10'
+  const valueColor = side === 'bid' ? 'text-green-400' : 'text-red-400'
+  return (
+    <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+      <h3 className={`font-medium mb-3 ${titleColor}`}>{title}</h3>
+      <div className="space-y-1">
+        <div className="text-xs text-gray-500 flex justify-between px-1">
+          <span>Price</span>
+          <span>Size</span>
+          <span>Orders</span>
         </div>
-      </div>
-
-      {/* Order Book & Walls */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Order Book */}
-        {showOrders && (
-          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-            <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-cyan-400" />
-              Order Book
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              {/* Bids */}
-              <div>
-                <div className="text-xs text-gray-500 mb-2 flex justify-between">
-                  <span>Price</span>
-                  <span>Size</span>
-                </div>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
-                  {visibleData.bids.slice(0, 15).map((bid, i) => (
-                    <div key={i} className="flex justify-between text-xs relative">
-                      <div
-                        className="absolute inset-0 bg-green-500/10 rounded"
-                        style={{ width: `${(bid.size / (visibleData.bids[0]?.size || 1)) * 100}%` }}
-                      />
-                      <span className="relative text-green-400">${formatPrice(bid.price)}</span>
-                      <span className="relative text-white">{formatNumber(bid.size)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {/* Asks */}
-              <div>
-                <div className="text-xs text-gray-500 mb-2 flex justify-between">
-                  <span>Price</span>
-                  <span>Size</span>
-                </div>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
-                  {visibleData.asks.slice(0, 15).map((ask, i) => (
-                    <div key={i} className="flex justify-between text-xs relative">
-                      <div
-                        className="absolute inset-0 bg-red-500/10 rounded"
-                        style={{ width: `${(ask.size / (visibleData.asks[0]?.size || 1)) * 100}%` }}
-                      />
-                      <span className="relative text-red-400">${formatPrice(ask.price)}</span>
-                      <span className="relative text-white">{formatNumber(ask.size)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+        {rows.map((row, idx) => {
+          const barWidth = Math.max(3, Math.round((row.size / maxSize) * 100))
+          return (
+            <div key={`${side}-${idx}`} className="relative flex justify-between text-xs px-1 py-1 rounded overflow-hidden">
+              <div className={`absolute inset-y-0 left-0 ${backgroundColor}`} style={{ width: `${barWidth}%` }} />
+              <span className={`relative font-mono ${valueColor}`}>${formatPrice(row.price)}</span>
+              <span className="relative text-white">{formatSize(row.size)}</span>
+              <span className="relative text-gray-400">{row.orders}</span>
             </div>
-          </div>
-        )}
-
-        {/* Liquidity Walls */}
-        <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-          <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-yellow-400" />
-            Liquidity Walls
-          </h3>
-
-          {/* Bid Walls */}
-          <div className="mb-4">
-            <div className="text-xs text-green-400 mb-2 flex items-center gap-1">
-              <ArrowUp className="w-3 h-3" />
-              Support (Bid Walls)
-            </div>
-            <div className="space-y-2">
-              {orderBookData.bidWalls.length > 0 ? orderBookData.bidWalls.map((wall, i) => (
-                <div key={i} className="flex items-center justify-between p-2 bg-green-500/10 rounded">
-                  <span className="text-green-400 text-sm">${formatPrice(wall.price)}</span>
-                  <span className="text-white text-sm font-medium">{formatNumber(wall.size)} {selectedToken}</span>
-                </div>
-              )) : (
-                <div className="text-gray-500 text-sm">No significant walls</div>
-              )}
-            </div>
-          </div>
-
-          {/* Ask Walls */}
-          <div>
-            <div className="text-xs text-red-400 mb-2 flex items-center gap-1">
-              <ArrowDown className="w-3 h-3" />
-              Resistance (Ask Walls)
-            </div>
-            <div className="space-y-2">
-              {orderBookData.askWalls.length > 0 ? orderBookData.askWalls.map((wall, i) => (
-                <div key={i} className="flex items-center justify-between p-2 bg-red-500/10 rounded">
-                  <span className="text-red-400 text-sm">${formatPrice(wall.price)}</span>
-                  <span className="text-white text-sm font-medium">{formatNumber(wall.size)} {selectedToken}</span>
-                </div>
-              )) : (
-                <div className="text-gray-500 text-sm">No significant walls</div>
-              )}
-            </div>
-          </div>
-        </div>
+          )
+        })}
       </div>
     </div>
   )

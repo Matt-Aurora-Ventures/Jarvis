@@ -34,19 +34,24 @@ export default function PortfolioAnalytics() {
 
   useEffect(() => {
     fetchPortfolioData()
-    fetchTrades()
-    fetchHoldings()
   }, [timeRange])
 
   const fetchPortfolioData = async () => {
     try {
-      const response = await fetch(`/api/portfolio/stats?range=${timeRange}`)
+      const response = await fetch(`/api/analytics/portfolio?range=${timeRange}`)
       if (response.ok) {
         const data = await response.json()
         setPortfolioData(data)
+        setTrades(data.trades || [])
+        setHoldings(data.holdings || [])
+      } else {
+        await fetchTrades()
+        await fetchHoldings()
       }
     } catch (err) {
       console.error('Failed to fetch portfolio data:', err)
+      await fetchTrades()
+      await fetchHoldings()
     } finally {
       setLoading(false)
     }

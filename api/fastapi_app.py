@@ -14,7 +14,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -467,6 +467,471 @@ Most endpoints require authentication via:
             "startup_ok": daemon_state.get("startup_ok", 0),
             "startup_failed": daemon_state.get("startup_failed", 0),
         }
+
+    @app.get("/api/ai/control-plane")
+    async def ai_control_plane_snapshot():
+        """Unified AI control plane snapshot for consensus/context/upgrader/compute."""
+        try:
+            from core.ai_control_plane import build_ai_control_plane_snapshot
+
+            return build_ai_control_plane_snapshot()
+        except Exception as exc:
+            logger.warning("AI control plane snapshot unavailable: %s", exc)
+            return {
+                "status": "degraded",
+                "timestamp": None,
+                "panels": {},
+                "error": str(exc),
+            }
+
+    @app.get("/api/roadmap/capabilities")
+    async def roadmap_capabilities_snapshot():
+        """Capability-driven roadmap status for frontend roadmap rendering."""
+        try:
+            from core.roadmap_capabilities import build_roadmap_capability_snapshot
+
+            return build_roadmap_capability_snapshot()
+        except Exception as exc:
+            logger.warning("Roadmap capability snapshot unavailable: %s", exc)
+            return {
+                "status": "degraded",
+                "generated_at": None,
+                "summary": {
+                    "total_features": 0,
+                    "completed_features": 0,
+                    "overall_progress_percent": 0,
+                    "state_counts": {},
+                },
+                "phases": [],
+                "state_catalog": {},
+                "source": "capability_probes_v1",
+                "error": str(exc),
+            }
+
+    @app.get("/api/runtime/capabilities")
+    async def runtime_capabilities_snapshot():
+        """Runtime capability report including degraded-mode reasons and fallbacks."""
+        try:
+            from core.runtime_capabilities import build_runtime_capability_report
+
+            return build_runtime_capability_report()
+        except Exception as exc:
+            logger.warning("Runtime capability report unavailable: %s", exc)
+            return {
+                "generated_at": None,
+                "components": {},
+                "status": "degraded",
+                "error": str(exc),
+            }
+
+    @app.get("/api/market/depth")
+    async def market_depth_snapshot(symbol: str = "SOL", levels: int = 20):
+        """Live market-depth snapshot for roadmap trading surfaces."""
+        try:
+            from core.roadmap_live_data import build_market_depth_snapshot
+
+            return build_market_depth_snapshot(symbol=symbol, levels=levels)
+        except Exception as exc:
+            logger.warning("Market depth snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "status": "degraded",
+                "symbol": symbol.upper(),
+                "levels": levels,
+                "bids": [],
+                "asks": [],
+                "error": str(exc),
+            }
+
+    @app.get("/api/intel/smart-money")
+    async def smart_money_snapshot(limit: int = 8):
+        """Smart-money feed backing the roadmap intelligence panel."""
+        try:
+            from core.roadmap_live_data import build_smart_money_snapshot
+
+            return build_smart_money_snapshot(limit=limit)
+        except Exception as exc:
+            logger.warning("Smart money snapshot unavailable: %s", exc)
+            return {"source": "degraded_fallback", "wallets": [], "error": str(exc)}
+
+    @app.get("/api/intel/sentiment")
+    async def sentiment_snapshot(token_limit: int = 8, post_limit: int = 10):
+        """Social sentiment feed backing roadmap intelligence panel."""
+        try:
+            from core.roadmap_live_data import build_social_sentiment_snapshot
+
+            return build_social_sentiment_snapshot(token_limit=token_limit, post_limit=post_limit)
+        except Exception as exc:
+            logger.warning("Sentiment snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "overall_score": 0,
+                "tokens": [],
+                "posts": [],
+                "error": str(exc),
+            }
+
+    @app.get("/api/intel/signal-aggregator")
+    async def signal_aggregator_snapshot(limit: int = 10, chain: str = "solana"):
+        """Signal-aggregator feed with ranked opportunities and provenance tags."""
+        try:
+            from core.roadmap_live_data import build_signal_aggregator_snapshot
+
+            return build_signal_aggregator_snapshot(limit=limit, chain=chain)
+        except Exception as exc:
+            logger.warning("Signal aggregator snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "chain": chain,
+                "summary": {
+                    "opportunity_count": 0,
+                    "bullish_count": 0,
+                    "bearish_count": 0,
+                    "avg_signal_score": 0.0,
+                },
+                "opportunities": [],
+                "error": str(exc),
+            }
+
+    @app.get("/api/intel/ml-regime")
+    async def ml_regime_snapshot(symbol: str = "SOL"):
+        """ML-regime status endpoint for strategy adaptation visibility."""
+        try:
+            from core.roadmap_live_data import build_ml_regime_snapshot
+
+            return build_ml_regime_snapshot(symbol=symbol)
+        except Exception as exc:
+            logger.warning("ML regime snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "status": "degraded",
+                "symbol": symbol.upper(),
+                "regime": "unknown",
+                "confidence": 0.0,
+                "recommended_strategy": "MeanReversion",
+                "classifier": "unavailable",
+                "features": {},
+                "error": str(exc),
+            }
+
+    @app.get("/api/sentinel/status")
+    async def sentinel_status_snapshot():
+        """Unified Sentinel status (coliseum + approvals + kill-switch)."""
+        try:
+            from core.roadmap_live_data import build_sentinel_status_snapshot
+
+            return build_sentinel_status_snapshot()
+        except Exception as exc:
+            logger.warning("Sentinel status unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "status": "degraded",
+                "approval_gate": {},
+                "kill_switch": {},
+                "coliseum": {},
+                "error": str(exc),
+            }
+
+    @app.get("/api/sentinel/coliseum")
+    async def sentinel_coliseum_snapshot(limit: int = 10):
+        """Coliseum strategy summary and recent strategy outcomes."""
+        try:
+            from core.roadmap_live_data import build_coliseum_snapshot
+
+            return build_coliseum_snapshot(limit=limit)
+        except Exception as exc:
+            logger.warning("Coliseum snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "status": "degraded",
+                "summary": {},
+                "strategies": [],
+                "error": str(exc),
+            }
+
+    @app.get("/api/lifeos/voice/status")
+    async def lifeos_voice_status_snapshot():
+        """Voice-system readiness surface for roadmap lifeOS integration."""
+        try:
+            from core.roadmap_live_data import build_voice_status_snapshot
+
+            return build_voice_status_snapshot()
+        except Exception as exc:
+            logger.warning("Voice status snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "status": "degraded",
+                "capabilities": {},
+                "error": str(exc),
+            }
+
+    @app.get("/api/lifeos/knowledge/status")
+    async def lifeos_knowledge_status_snapshot():
+        """Knowledge/memory readiness surface for roadmap lifeOS integration."""
+        try:
+            from core.roadmap_live_data import build_knowledge_status_snapshot
+
+            return build_knowledge_status_snapshot()
+        except Exception as exc:
+            logger.warning("Knowledge status snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "status": "degraded",
+                "capabilities": {},
+                "metrics": {},
+                "error": str(exc),
+            }
+
+    @app.get("/api/lifeos/mirror/status")
+    async def lifeos_mirror_status_snapshot():
+        """Mirror Test operational status and seven-day trend summary."""
+        try:
+            from core.roadmap_live_data import build_mirror_test_snapshot
+
+            return build_mirror_test_snapshot()
+        except Exception as exc:
+            logger.warning("Mirror test snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "status": "degraded",
+                "last_run": None,
+                "runs_7d": 0,
+                "avg_score_7d": 0.0,
+                "pending_reviews": 0,
+                "error": str(exc),
+            }
+
+    @app.get("/api/advanced/mev")
+    async def advanced_mev_snapshot(limit: int = 20, chain: str = "solana"):
+        """MEV dashboard feed for advanced tooling surfaces."""
+        try:
+            from core.roadmap_live_data import build_advanced_mev_snapshot
+
+            return build_advanced_mev_snapshot(limit=limit, chain=chain)
+        except Exception as exc:
+            logger.warning("Advanced MEV snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "chain": chain,
+                "summary": {
+                    "event_count": 0,
+                    "total_profit_usd": 0.0,
+                    "total_victim_loss_usd": 0.0,
+                    "high_severity_count": 0,
+                    "medium_severity_count": 0,
+                    "low_severity_count": 0,
+                },
+                "events": [],
+                "error": str(exc),
+            }
+
+    @app.get("/api/advanced/multi-dex")
+    async def advanced_multi_dex_snapshot(trading_pair: str = "SOL-USDC", amount_usd: float = 1000.0):
+        """Multi-DEX quote comparison endpoint."""
+        try:
+            from core.roadmap_live_data import build_advanced_multi_dex_snapshot
+
+            return build_advanced_multi_dex_snapshot(trading_pair=trading_pair, amount_usd=amount_usd)
+        except Exception as exc:
+            logger.warning("Advanced multi-dex snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "trading_pair": str(trading_pair).upper(),
+                "amount_usd": float(amount_usd),
+                "quotes": [],
+                "best_route": {},
+                "error": str(exc),
+            }
+
+    @app.get("/api/analytics/portfolio")
+    async def analytics_portfolio_snapshot(range: str = "7d"):
+        """Portfolio analytics summary endpoint for phase-5 roadmap surfaces."""
+        try:
+            from core.roadmap_live_data import build_portfolio_analytics_snapshot
+
+            return build_portfolio_analytics_snapshot(range_key=range)
+        except Exception as exc:
+            logger.warning("Portfolio analytics snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "range": range,
+                "metrics": {},
+                "trades": [],
+                "holdings": [],
+                "pnl_distribution": {},
+                "error": str(exc),
+            }
+
+    @app.get("/api/advanced/perps/status")
+    async def advanced_perps_status_snapshot():
+        """Perps production-readiness surface for roadmap and control plane."""
+        try:
+            from core.roadmap_live_data import build_advanced_perps_status_snapshot
+
+            return build_advanced_perps_status_snapshot()
+        except Exception as exc:
+            logger.warning("Advanced perps status unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "status": "degraded",
+                "capabilities": {},
+                "mode": "degraded_fallback",
+                "error": str(exc),
+            }
+
+    @app.get("/api/polish/themes/status")
+    async def polish_theme_status_snapshot():
+        """Theme-system readiness status."""
+        try:
+            from core.roadmap_live_data import build_advanced_theme_status_snapshot
+
+            return build_advanced_theme_status_snapshot()
+        except Exception as exc:
+            logger.warning("Theme status snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "status": "degraded",
+                "theme_modes": [],
+                "capabilities": {},
+                "error": str(exc),
+            }
+
+    @app.get("/api/polish/onboarding/status")
+    async def polish_onboarding_status_snapshot():
+        """Onboarding readiness status."""
+        try:
+            from core.roadmap_live_data import build_advanced_onboarding_status_snapshot
+
+            return build_advanced_onboarding_status_snapshot()
+        except Exception as exc:
+            logger.warning("Onboarding status snapshot unavailable: %s", exc)
+            return {
+                "source": "degraded_fallback",
+                "timestamp": None,
+                "status": "degraded",
+                "steps": [],
+                "capabilities": {},
+                "error": str(exc),
+            }
+
+    @app.post("/api/trade")
+    async def execute_trade(payload: Dict[str, Any]):
+        """Execute paper trade for the primary order-panel surface."""
+        try:
+            from core.roadmap_live_data import execute_paper_trade
+
+            mint = str(payload.get("mint") or "").strip()
+            side = str(payload.get("side") or "buy").strip().lower()
+            symbol = str(payload.get("symbol") or "SOL").strip().upper()
+            amount_sol = float(payload.get("amount_sol") or 0)
+            tp_pct = float(payload.get("tp_pct") or 20)
+            sl_pct = float(payload.get("sl_pct") or 10)
+
+            return execute_paper_trade(
+                mint=mint,
+                side=side,
+                amount_sol=amount_sol,
+                tp_pct=tp_pct,
+                sl_pct=sl_pct,
+                symbol=symbol,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.warning("Paper trade endpoint failed: %s", exc)
+            return {
+                "success": False,
+                "status": "error",
+                "error": str(exc),
+            }
+
+    @app.get("/api/sentinel/approvals/pending")
+    async def sentinel_pending_approvals():
+        """List pending approval-gate proposals."""
+        try:
+            from core.approval_gate import get_approval_gate
+
+            pending = [item.to_dict() for item in get_approval_gate().get_pending()]
+            return {"count": len(pending), "items": pending}
+        except Exception as exc:
+            logger.warning("Pending approvals unavailable: %s", exc)
+            return {"count": 0, "items": [], "error": str(exc)}
+
+    @app.post("/api/sentinel/approvals/{proposal_id}/approve")
+    async def sentinel_approve(proposal_id: str, approved_by: str = "api_user"):
+        """Approve a pending trade proposal."""
+        try:
+            from core.approval_gate import get_approval_gate
+
+            ok = get_approval_gate().approve(proposal_id=proposal_id, approved_by=approved_by)
+            return {"ok": bool(ok), "proposal_id": proposal_id}
+        except Exception as exc:
+            logger.warning("Approval action failed: %s", exc)
+            return {"ok": False, "proposal_id": proposal_id, "error": str(exc)}
+
+    @app.post("/api/sentinel/approvals/{proposal_id}/reject")
+    async def sentinel_reject(proposal_id: str, reason: str = "Rejected via API"):
+        """Reject a pending trade proposal."""
+        try:
+            from core.approval_gate import get_approval_gate
+
+            ok = get_approval_gate().reject(proposal_id=proposal_id, reason=reason)
+            return {"ok": bool(ok), "proposal_id": proposal_id}
+        except Exception as exc:
+            logger.warning("Reject action failed: %s", exc)
+            return {"ok": False, "proposal_id": proposal_id, "error": str(exc)}
+
+    @app.post("/api/sentinel/kill-switch/activate")
+    async def sentinel_activate_kill_switch(reason: str = "Manual API activation", activated_by: str = "api_user"):
+        """Activate sentinel kill switch through emergency-stop manager."""
+        try:
+            from core.trading.emergency_stop import get_emergency_stop_manager
+
+            ok, message = get_emergency_stop_manager().activate_kill_switch(
+                reason=reason,
+                activated_by=activated_by,
+            )
+            return {"ok": bool(ok), "message": message}
+        except Exception as exc:
+            logger.warning("Kill-switch activation failed: %s", exc)
+            return {"ok": False, "error": str(exc)}
+
+    @app.post("/api/sentinel/kill-switch/reset")
+    async def sentinel_reset_kill_switch():
+        """Reset emergency stop and approval kill-switch states."""
+        response = {"ok": True}
+        try:
+            from core.trading.emergency_stop import get_emergency_stop_manager
+
+            ok, message = get_emergency_stop_manager().resume_trading(
+                resumed_by="api_user",
+            )
+            response["emergency_stop"] = {"ok": bool(ok), "message": message}
+            response["ok"] = response["ok"] and bool(ok)
+        except Exception as exc:
+            response["emergency_stop"] = {"ok": False, "error": str(exc)}
+            response["ok"] = False
+
+        try:
+            from core.approval_gate import get_approval_gate
+
+            ok = get_approval_gate().reset_kill_switch(confirm="I_UNDERSTAND_THE_RISK")
+            response["approval_gate"] = {"ok": bool(ok)}
+            response["ok"] = response["ok"] and bool(ok)
+        except Exception as exc:
+            response["approval_gate"] = {"ok": False, "error": str(exc)}
+            response["ok"] = False
+
+        return response
 
     @app.get("/api/metrics")
     async def prometheus_metrics():

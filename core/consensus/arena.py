@@ -8,6 +8,8 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 import requests
@@ -15,6 +17,11 @@ import requests
 from .scoring import score_responses
 
 logger = logging.getLogger(__name__)
+
+ROOT = Path(__file__).resolve().parents[2]
+CONSENSUS_AUDIT_LOG_PATH = Path(
+    os.getenv("JARVIS_CONSENSUS_AUDIT_LOG", str(ROOT / "logs" / "consensus_arena.jsonl"))
+)
 
 PANEL: Dict[str, str] = {
     "claude": "anthropic/claude-opus-4-6",
@@ -202,6 +209,17 @@ async def _log_consensus_to_supermemory(payload: Dict[str, Any]) -> None:
         logger.debug("[arena] supermemory logging skipped: %s", exc)
 
 
+def _log_consensus_to_local(payload: Dict[str, Any]) -> None:
+    try:
+        audit_payload = dict(payload)
+        audit_payload["logged_at"] = datetime.now(timezone.utc).isoformat()
+        CONSENSUS_AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with CONSENSUS_AUDIT_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(audit_payload, ensure_ascii=True) + "\n")
+    except Exception as exc:
+        logger.debug("[arena] local audit logging skipped: %s", exc)
+
+
 async def _maybe_await(result: Any) -> None:
     if inspect.isawaitable(result):
         await result
@@ -260,6 +278,7 @@ async def get_consensus(
     if scoring.get("consensus_tier") == "divergent":
         payload["perspectives"] = scoring.get("responses", [])
 
+    _log_consensus_to_local(payload)
     await _maybe_await(_log_consensus_to_supermemory(payload))
     return payload
 

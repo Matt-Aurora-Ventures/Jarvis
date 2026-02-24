@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { usePerpsData } from './usePerpsData'
 import { PerpsSignalPanel } from './PerpsSignalPanel'
 import { PerpsPositionsTable } from './PerpsPositionsTable'
@@ -42,6 +42,7 @@ function ModeBadge({ mode }: { mode: string }) {
 }
 
 export function PerpsSniper() {
+  const [platformStatus, setPlatformStatus] = useState<{ status?: string; mode?: string } | null>(null)
   const {
     prices,
     status,
@@ -67,10 +68,32 @@ export function PerpsSniper() {
   const isArmed = status?.arm?.stage === 'armed'
   const isLive = status?.mode === 'live'
 
+  useEffect(() => {
+    let cancelled = false
+    const fetchPlatformStatus = async () => {
+      try {
+        const response = await fetch('/api/advanced/perps/status')
+        if (!response.ok) return
+        const payload = await response.json()
+        if (!cancelled) {
+          setPlatformStatus(payload)
+        }
+      } catch {
+        // Keep existing perps surface operational if status API is unavailable.
+      }
+    }
+    fetchPlatformStatus()
+    const id = setInterval(fetchPlatformStatus, 15000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [])
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-2 text-xs text-amber-300">
-        Prototype preview only. Canonical production surface is jarvis-sniper.
+      <div className="bg-cyan-500/10 border-b border-cyan-500/30 px-6 py-2 text-xs text-cyan-300">
+        Perps command center mode: {platformStatus?.mode || 'initializing'} ({platformStatus?.status || 'unknown'}).
       </div>
 
       <div className="bg-gray-900 border-b border-gray-800 px-6 py-3">

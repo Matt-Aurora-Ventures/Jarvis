@@ -1,13 +1,18 @@
 import React from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { Home, MessageCircle, Settings, Search, Mic, TrendingUp, Bot, Map, Bell } from 'lucide-react'
+import { Home, MessageCircle, Settings, Search, Mic, TrendingUp, Bot, Map, Bell, Cpu } from 'lucide-react'
 import useJarvisStore from '../stores/jarvisStore'
+import MobileNav from './MobileNav'
+import { ThemeToggle } from './ThemeToggle'
+import OnboardingCoach from './onboarding/OnboardingCoach'
 
 function Layout() {
   const { isListening, status } = useJarvisStore()
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
+      <MobileNav />
+
       {/* Top Navigation - V3 White Knight Style */}
       <div className="top-nav">
         <div className="nav-brand">
@@ -71,6 +76,15 @@ function Layout() {
             Research
           </NavLink>
           <NavLink
+            to="/ai-control"
+            className={({ isActive }) =>
+              `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
+            }
+          >
+            <Cpu size={18} />
+            AI Control
+          </NavLink>
+          <NavLink
             to="/roadmap"
             className={({ isActive }) =>
               `btn ${isActive ? 'btn-primary' : 'btn-ghost'}`
@@ -117,6 +131,7 @@ function Layout() {
             />
             <span>{isListening ? 'Listening' : 'Idle'}</span>
           </div>
+          <ThemeToggle size="sm" showLabel={false} />
         </div>
       </div>
 
@@ -127,6 +142,7 @@ function Layout() {
         padding: 'var(--spacing-xl)',
         minHeight: 'calc(100vh - 64px)'
       }}>
+        <OnboardingCoach />
         <Outlet />
       </main>
     </div>

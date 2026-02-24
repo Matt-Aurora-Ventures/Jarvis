@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 JARVIS Bot Supervisor - Robust process management with auto-restart.
 
@@ -590,7 +590,7 @@ class BotSupervisor:
                 return
 
             message = (
-                f"⚠️ <b>Component Error Alert</b>\n\n"
+                f"[WARNING] <b>Component Error Alert</b>\n\n"
                 f"<b>Component:</b> {component}\n"
                 f"<b>Consecutive failures:</b> {consecutive}\n"
                 f"<b>Total restarts:</b> {total}\n"
@@ -623,7 +623,7 @@ class BotSupervisor:
                 return
 
             message = (
-                f"🚨 <b>CRITICAL: Component Died</b>\n\n"
+                f"[CRITICAL] <b>Component Died</b>\n\n"
                 f"<b>Component:</b> {component}\n"
                 f"<b>Status:</b> Max restarts reached - STOPPED\n"
                 f"<b>Last error:</b> <code>{error[:200]}</code>\n\n"
@@ -680,6 +680,11 @@ def _cooldown_mode() -> bool:
 def _arena_mode_enabled() -> bool:
     """Enable consensus arena routing for complex LLM tasks."""
     return _env_flag("JARVIS_USE_ARENA", True)
+
+
+def _nosana_mode_enabled() -> bool:
+    """Enable Nosana heavy-compute routing."""
+    return _env_flag("JARVIS_USE_NOSANA", False)
 
 
 async def create_buy_bot():
@@ -1417,6 +1422,98 @@ async def register_memory_reflect_jobs():
     logger.info("[memory_reflect] Scheduler started for memory reflection jobs")
 
 
+async def register_model_upgrader_job():
+    """
+    Register weekly model-upgrader scan in the live supervisor scheduler path.
+
+    Schedule:
+    - Weekly scan cron expression: 0 3 * * * (3 AM UTC daily trigger)
+    - Weekly guard inside jobs/model_upgrader.py enforces 7-day cadence.
+    """
+    if os.environ.get("JARVIS_MODEL_UPGRADER_ENABLED", "true").strip().lower() != "true":
+        logger.info("[model_upgrader] Disabled via JARVIS_MODEL_UPGRADER_ENABLED=false")
+        return
+
+    from core.automation.scheduler import get_scheduler
+    from jobs.model_upgrader import ModelUpgrader, _parse_candidate_specs
+
+    scheduler = get_scheduler()
+
+    def _weekly_scan_action():
+        raw_candidates = os.environ.get("MODEL_UPGRADER_CANDIDATES_JSON", "[]")
+        try:
+            candidates = _parse_candidate_specs(raw_candidates)
+        except Exception as exc:
+            logger.warning("[model_upgrader] Failed parsing MODEL_UPGRADER_CANDIDATES_JSON: %s", exc)
+            candidates = []
+
+        upgrader = ModelUpgrader()
+        result = upgrader.run_weekly_scan(candidates=candidates, force=False)
+        logger.info("[model_upgrader] Weekly scan result: %s", result)
+        return result
+
+    job_id = scheduler.schedule_cron(
+        name="model_upgrader_weekly_scan",
+        action=_weekly_scan_action,
+        cron_expression="0 3 * * *",
+        params={},
+        enabled=True,
+        retry_on_failure=True,
+        timeout=900.0,
+        tags=["model", "upgrader", "weekly", "maintenance"],
+    )
+    logger.info("[model_upgrader] Registered weekly scan job (3 AM UTC) - ID: %s", job_id)
+
+    # Idempotent start: scheduler handles repeated start calls gracefully.
+    await scheduler.start()
+
+
+async def register_mesh_sync_listener():
+    """
+    Start the encrypted mesh sync listener when enabled/configured.
+    """
+    from services.compute.mesh_attestation_service import get_mesh_attestation_service
+    from services.compute.mesh_sync_service import get_mesh_sync_service
+
+    service = get_mesh_sync_service()
+    attestation_service = get_mesh_attestation_service()
+    on_attestation = attestation_service.on_mesh_hash if getattr(attestation_service, "enabled", False) else None
+    status = await service.start_listener(on_attestation=on_attestation)
+    logger.info("[mesh_sync] Listener status: %s", status)
+    return service
+
+
+def runtime_capability_report() -> Dict[str, Any]:
+    """Build and log runtime capability matrix for degraded-mode visibility."""
+    try:
+        from core.runtime_capabilities import (
+            build_runtime_capability_report,
+            collect_degraded_mode_messages,
+        )
+
+        report = build_runtime_capability_report()
+        components = report.get("components", {})
+
+        for component_name, info in components.items():
+            if not isinstance(info, dict):
+                continue
+            logger.info(
+                "[runtime] %s status=%s reason=%s fallback=%s",
+                component_name,
+                info.get("status"),
+                info.get("reason"),
+                info.get("fallback"),
+            )
+
+        for message in collect_degraded_mode_messages(report):
+            logger.warning("[runtime-degraded] %s", message)
+
+        return report
+    except Exception as exc:
+        logger.warning("Runtime capability report unavailable: %s", exc)
+        return {"components": {}}
+
+
 def validate_startup() -> bool:
     """
     Validate critical configuration before starting.
@@ -1468,9 +1565,23 @@ def validate_startup() -> bool:
         groups = validator.get_group_summary()
         for group, stats in sorted(groups.items()):
             configured_pct = (stats["configured"] / stats["total"] * 100) if stats["total"] > 0 else 0
-            status = "✓" if configured_pct > 50 else "!" if configured_pct > 0 else "✗"
+            status = "+" if configured_pct > 50 else "!" if configured_pct > 0 else "x"
             print(f"  {status} {group:12s}: {stats['configured']:2d}/{stats['total']:2d} ({configured_pct:3.0f}%)")
         print()
+
+        runtime_report = runtime_capability_report()
+        runtime_components = runtime_report.get("components", {})
+        if runtime_components:
+            print("Runtime Capability Guardrails:")
+            for component_name, info in runtime_components.items():
+                if not isinstance(info, dict):
+                    continue
+                if info.get("status") in ("degraded", "disabled"):
+                    print(
+                        f"  [RUNTIME] {component_name}: {info.get('status')} "
+                        f"(reason={info.get('reason')}, fallback={info.get('fallback')})"
+                    )
+            print()
 
         return True  # Allow startup even with warnings
 
@@ -1555,8 +1666,14 @@ async def main():
 
     load_env()
     arena_enabled = _arena_mode_enabled()
+    nosana_enabled = _nosana_mode_enabled()
+    os.environ.setdefault("JARVIS_SUPERMEMORY_HOOKS", "1")
+    os.environ.setdefault("JARVIS_MODEL_UPGRADER_ENABLED", "1")
     os.environ["JARVIS_USE_ARENA"] = "1" if arena_enabled else "0"
+    os.environ["JARVIS_USE_NOSANA"] = "1" if nosana_enabled else "0"
     logger.info("Consensus arena routing: %s", "ENABLED" if arena_enabled else "DISABLED")
+    logger.info("Nosana heavy-compute routing: %s", "ENABLED" if nosana_enabled else "DISABLED")
+    runtime_capability_report()
 
     # ==========================================================
     # MCP SERVERS: Optional MCP toolchain for local agents
@@ -1766,6 +1883,25 @@ async def main():
     except Exception as e:
         logger.warning(f"Memory reflection jobs failed to register: {e}")
 
+    # ==========================================================
+    # MODEL UPGRADER: Register weekly scan cron
+    # ==========================================================
+    try:
+        await register_model_upgrader_job()
+        logger.info("Model upgrader scheduler: ENABLED")
+    except Exception as e:
+        logger.warning(f"Model upgrader scheduler failed to register: {e}")
+
+    # ==========================================================
+    # MESH SYNC: Register encrypted NATS listener
+    # ==========================================================
+    mesh_sync_service = None
+    try:
+        mesh_sync_service = await register_mesh_sync_listener()
+        logger.info("Mesh sync listener: ENABLED")
+    except Exception as e:
+        logger.warning(f"Mesh sync listener failed to register: {e}")
+
     # Register components
     # Each component runs independently - if one crashes, others continue
     supervisor.register("buy_bot", create_buy_bot, min_backoff=5.0, max_backoff=60.0)
@@ -1806,6 +1942,13 @@ async def main():
             shutdown_mgr.register_hook(
                 name="health_endpoint",
                 callback=health_runner.cleanup,
+                phase=ShutdownPhase.CLEANUP,
+                timeout=5.0,
+            )
+        if mesh_sync_service:
+            shutdown_mgr.register_hook(
+                name="mesh_sync",
+                callback=mesh_sync_service.stop,
                 phase=ShutdownPhase.CLEANUP,
                 timeout=5.0,
             )
@@ -1865,6 +2008,8 @@ async def main():
                 await heartbeat.stop()
             if health_runner:
                 await health_runner.cleanup()
+            if mesh_sync_service:
+                await mesh_sync_service.stop()
 
 
 if __name__ == "__main__":
@@ -1872,3 +2017,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nShutdown complete.")
+

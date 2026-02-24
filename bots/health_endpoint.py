@@ -95,6 +95,20 @@ def _collect_component_health() -> dict:
     }
 
 
+def _collect_runtime_status() -> dict:
+    """Operator-visible runtime capability report."""
+    try:
+        from core.runtime_capabilities import build_runtime_capability_report
+
+        return build_runtime_capability_report()
+    except Exception as exc:
+        return {
+            "generated_at": datetime.utcnow().isoformat(),
+            "components": {},
+            "error": str(exc),
+        }
+
+
 def update_health(components: dict):
     """Update health state from supervisor."""
     global _health_state
@@ -108,6 +122,7 @@ def update_health(components: dict):
 async def health_handler(request):
     """Handle /health endpoint."""
     components = _collect_component_health()
+    runtime = _collect_runtime_status()
     _health_state["components"] = components
     _health_state["last_update"] = datetime.utcnow().isoformat()
     _health_state["status"] = _aggregate_status(components)
@@ -119,6 +134,7 @@ async def health_handler(request):
         "timestamp": datetime.utcnow().isoformat(),
         "uptime": None,
         "components": components,
+        "runtime": runtime,
     }
 
     if _health_state["started_at"]:
@@ -162,6 +178,15 @@ async def metrics_handler(request):
     return web.Response(text="\n".join(lines), content_type="text/plain")
 
 
+async def runtime_status_handler(request):
+    """Handle /runtime-status endpoint for operator diagnostics."""
+    runtime = _collect_runtime_status()
+    status_code = 200
+    if runtime.get("error"):
+        status_code = 503
+    return web.json_response(runtime, status=status_code)
+
+
 async def start_health_server(port: int = 8080):
     """Start the health check HTTP server."""
     global _health_state
@@ -173,6 +198,7 @@ async def start_health_server(port: int = 8080):
     app.router.add_get("/ready", ready_handler)
     app.router.add_get("/live", live_handler)
     app.router.add_get("/metrics", metrics_handler)
+    app.router.add_get("/runtime-status", runtime_status_handler)
     app.router.add_get("/", health_handler)  # Root also returns health
 
     runner = web.AppRunner(app)

@@ -30,15 +30,24 @@ Environment Variables:
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 # Lazy import to allow graceful degradation
 _supermemory_available = False
@@ -149,11 +158,185 @@ class SupermemoryClient:
         }
         return mapping.get(memory_type, self.user_id_long)
 
+    @staticmethod
+    def _mesh_memory_label(memory_type: Optional[MemoryType], metadata: Optional[Dict[str, Any]]) -> str:
+        if memory_type == MemoryType.SHORT_TERM:
+            return "short"
+        if memory_type == MemoryType.MID_TERM:
+            return "mid"
+        if memory_type == MemoryType.LONG_TERM:
+            return "long"
+        if memory_type == MemoryType.SHARED:
+            return "shared"
+
+        explicit = str((metadata or {}).get("memory_type", "")).strip().lower()
+        if explicit in {"short", "short_term"}:
+            return "short"
+        if explicit in {"mid", "mid_term"}:
+            return "mid"
+        if explicit in {"long", "long_term"}:
+            return "long"
+        if explicit == "shared":
+            return "shared"
+        return "custom"
+
+    @staticmethod
+    def _hash_metadata(metadata: Dict[str, Any]) -> str:
+        canonical = json.dumps(metadata, separators=(",", ":"), sort_keys=True, default=str)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _mesh_sync_enabled() -> bool:
+        return _env_flag("JARVIS_USE_MESH_SYNC", _env_flag("JARVIS_MESH_SYNC_ENABLED", False))
+
+    @staticmethod
+    def _mesh_attestation_enabled() -> bool:
+        return _env_flag("JARVIS_USE_MESH_ATTEST", _env_flag("JARVIS_MESH_ATTESTATION_ENABLED", False))
+
+    async def _after_successful_write_emit_mesh(
+        self,
+        *,
+        content: str,
+        container_tag: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        memory_type: Optional[MemoryType] = None,
+        conversation_id: Optional[str] = None,
+        source_hook: Optional[str] = None,
+        emit_mesh: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Post-write lifecycle: publish -> validate -> attest.
+
+        Mesh failures never propagate back into the original memory write path.
+        """
+        meta = dict(metadata or {})
+        if not emit_mesh:
+            return {"status": "skipped", "reason": "emit_mesh_disabled"}
+        if bool(meta.get("_mesh_internal")):
+            return {"status": "skipped", "reason": "mesh_internal"}
+        if not self._mesh_sync_enabled():
+            return {"status": "skipped", "reason": "mesh_sync_disabled"}
+
+        try:
+            from services.compute.mesh_sync_service import get_mesh_sync_service
+        except Exception as exc:
+            logger.warning("[%s] Mesh sync import failed: %s", self.bot_name, exc)
+            return {"status": "failed", "reason": "mesh_sync_import_failed", "error": str(exc)}
+
+        mesh_sync_service = get_mesh_sync_service()
+        event_id = str(meta.get("event_id") or uuid.uuid4().hex)
+        normalized_source_hook = source_hook or str(meta.get("hook") or "").strip() or None
+        state_delta = {
+            "event_id": event_id,
+            "bot_name": self.bot_name,
+            "container_tag": container_tag,
+            "memory_type": self._mesh_memory_label(memory_type, meta),
+            "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "metadata_hash": self._hash_metadata(meta),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "conversation_id": conversation_id or meta.get("conversation_id"),
+            "source_hook": normalized_source_hook,
+            "schema_version": 1,
+        }
+
+        publish_result = await mesh_sync_service.publish_state_delta(state_delta)
+        if not bool(publish_result.get("published")):
+            return {
+                "status": str(publish_result.get("status", "pending_publish")),
+                "event_id": event_id,
+                "state_hash": publish_result.get("state_hash"),
+                "reason": publish_result.get("reason"),
+            }
+
+        envelope = publish_result.get("envelope")
+        if not isinstance(envelope, dict):
+            mesh_sync_service.record_outbox_event(
+                event_id=event_id,
+                status="invalid_envelope",
+                state_hash=str(publish_result.get("state_hash") or ""),
+                state_delta=state_delta,
+                reason="missing_envelope",
+            )
+            return {"status": "invalid_envelope", "event_id": event_id, "reason": "missing_envelope"}
+
+        is_valid, validation_reason = mesh_sync_service.validate_envelope(envelope)
+        if not is_valid:
+            mesh_sync_service.record_outbox_event(
+                event_id=event_id,
+                status="invalid_envelope",
+                state_hash=str(publish_result.get("state_hash") or envelope.get("state_hash") or ""),
+                state_delta=state_delta,
+                envelope=envelope,
+                reason=validation_reason,
+            )
+            return {"status": "invalid_envelope", "event_id": event_id, "reason": validation_reason}
+
+        state_hash = str(envelope.get("state_hash") or publish_result.get("state_hash") or "").strip()
+        if not self._mesh_attestation_enabled():
+            return {"status": "published", "event_id": event_id, "state_hash": state_hash}
+
+        try:
+            from services.compute.mesh_attestation_service import get_mesh_attestation_service
+        except Exception as exc:
+            mesh_sync_service.record_outbox_event(
+                event_id=event_id,
+                status="pending_commit",
+                state_hash=state_hash,
+                state_delta=state_delta,
+                envelope=envelope,
+                reason=f"attestation_import_failed:{exc}",
+            )
+            return {"status": "pending_commit", "event_id": event_id, "state_hash": state_hash, "error": str(exc)}
+
+        attestation_service = get_mesh_attestation_service()
+        commit_result = await attestation_service.commit_state_hash(
+            state_hash,
+            event_id=event_id,
+            node_pubkey=self.bot_name,
+            metadata={
+                "container_tag": container_tag,
+                "memory_type": state_delta["memory_type"],
+                "source_hook": state_delta.get("source_hook"),
+            },
+        )
+        if str(commit_result.get("status")) == "committed":
+            mesh_sync_service.record_outbox_event(
+                event_id=event_id,
+                status="committed",
+                state_hash=state_hash,
+                state_delta=state_delta,
+                envelope=envelope,
+            )
+            return {
+                "status": "committed",
+                "event_id": event_id,
+                "state_hash": state_hash,
+                "signature": commit_result.get("signature"),
+            }
+
+        mesh_sync_service.record_outbox_event(
+            event_id=event_id,
+            status="pending_commit",
+            state_hash=state_hash,
+            state_delta=state_delta,
+            envelope=envelope,
+            reason=str(commit_result.get("error") or commit_result.get("reason") or "commit_failed"),
+        )
+        return {
+            "status": "pending_commit",
+            "event_id": event_id,
+            "state_hash": state_hash,
+            "reason": commit_result.get("reason"),
+            "error": commit_result.get("error"),
+        }
+
     async def add(
         self,
         content: str,
         memory_type: MemoryType = MemoryType.LONG_TERM,
         metadata: Optional[Dict[str, Any]] = None,
+        *,
+        emit_mesh: bool = True,
     ) -> bool:
         """
         Add a memory entry.
@@ -190,6 +373,20 @@ class SupermemoryClient:
                 metadata=meta,
             )
             logger.debug(f"[{self.bot_name}] Added {memory_type.value} memory")
+            if bool(meta.get("_mesh_internal")):
+                return True
+            try:
+                await self._after_successful_write_emit_mesh(
+                    content=content,
+                    container_tag=user_id,
+                    metadata=meta,
+                    memory_type=memory_type,
+                    conversation_id=meta.get("conversation_id"),
+                    source_hook=str(meta.get("hook") or "").strip() or None,
+                    emit_mesh=emit_mesh,
+                )
+            except Exception as mesh_exc:
+                logger.warning(f"[{self.bot_name}] Mesh lifecycle failed after add(): {mesh_exc}")
             return True
         except Exception as e:
             logger.warning(f"[{self.bot_name}] Failed to add memory: {e}")
@@ -201,6 +398,8 @@ class SupermemoryClient:
         container_tag: str,
         metadata: Optional[Dict[str, Any]] = None,
         custom_id: Optional[str] = None,
+        *,
+        emit_mesh: bool = True,
     ) -> bool:
         """
         Add memory with an explicit container tag.
@@ -230,6 +429,19 @@ class SupermemoryClient:
 
         try:
             await client.memories.add(**kwargs)
+            if not bool(meta.get("_mesh_internal")):
+                try:
+                    await self._after_successful_write_emit_mesh(
+                        content=content,
+                        container_tag=container_tag,
+                        metadata=meta,
+                        memory_type=None,
+                        conversation_id=meta.get("conversation_id"),
+                        source_hook=str(meta.get("hook") or "").strip() or None,
+                        emit_mesh=emit_mesh,
+                    )
+                except Exception as mesh_exc:
+                    logger.warning(f"[{self.bot_name}] Mesh lifecycle failed after add_with_container_tag(): {mesh_exc}")
             return True
         except TypeError:
             # Some SDK versions do not support customId. Preserve dedupe signal
@@ -239,6 +451,21 @@ class SupermemoryClient:
                 meta.setdefault("custom_id", custom_id)
             try:
                 await client.memories.add(**kwargs)
+                if not bool(meta.get("_mesh_internal")):
+                    try:
+                        await self._after_successful_write_emit_mesh(
+                            content=content,
+                            container_tag=container_tag,
+                            metadata=meta,
+                            memory_type=None,
+                            conversation_id=meta.get("conversation_id"),
+                            source_hook=str(meta.get("hook") or "").strip() or None,
+                            emit_mesh=emit_mesh,
+                        )
+                    except Exception as mesh_exc:
+                        logger.warning(
+                            f"[{self.bot_name}] Mesh lifecycle failed after add_with_container_tag() retry: {mesh_exc}"
+                        )
                 return True
             except Exception as e:
                 logger.warning(f"[{self.bot_name}] add_with_container_tag retry failed: {e}")
@@ -477,13 +704,25 @@ class SupermemoryClient:
             context_memories=context_memories[:max_profile_items],
         )
 
-        return {
+        payload = {
             "static_profile": static_profile,
             "dynamic_profile": dynamic_profile,
             "context_memories": context_memories,
             "prompt_block": prompt_block,
             "memory_count": len(memories),
         }
+        _record_hook_telemetry(
+            self.bot_name,
+            "pre_recall",
+            {
+                "query": query,
+                "memory_count": len(memories),
+                "static_profile": list(static_profile),
+                "dynamic_profile": list(dynamic_profile),
+                "context_count": len(context_memories),
+            },
+        )
+        return payload
 
     def extract_candidate_facts(
         self,
@@ -591,7 +830,19 @@ class SupermemoryClient:
 
         fact_results = await asyncio.gather(*fact_writes, return_exceptions=True)
         facts_ok = any(r is True for r in fact_results) if fact_results else True
-        return saved_conversation or facts_ok
+        success = saved_conversation or facts_ok
+        _record_hook_telemetry(
+            self.bot_name,
+            "post_response",
+            {
+                "conversation_id": conversation_id,
+                "saved_conversation": bool(saved_conversation),
+                "facts_count": len(facts),
+                "facts_extracted": list(facts),
+                "success": bool(success),
+            },
+        )
+        return success
 
     async def add_research_notebook(
         self,
@@ -697,6 +948,7 @@ class SupermemoryClient:
 
 # Global client cache
 _clients: Dict[str, SupermemoryClient] = {}
+_hook_telemetry: Dict[str, Dict[str, Any]] = {}
 
 
 def get_memory_client(bot_name: str) -> SupermemoryClient:
@@ -713,6 +965,31 @@ def get_memory_client(bot_name: str) -> SupermemoryClient:
     if bot_name not in _clients:
         _clients[bot_name] = SupermemoryClient(bot_name=bot_name)
     return _clients[bot_name]
+
+
+def _record_hook_telemetry(bot_name: str, hook_name: str, payload: Dict[str, Any]) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    entry = dict(payload)
+    entry["timestamp"] = now
+
+    bot_map = _hook_telemetry.setdefault(bot_name, {})
+    bot_map[hook_name] = entry
+
+
+def get_hook_telemetry(bot_name: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Read latest hook telemetry for operator diagnostics.
+
+    If bot_name is omitted, prefer `jarvis` and otherwise return first available.
+    """
+    if bot_name:
+        return dict(_hook_telemetry.get(bot_name.lower(), {}))
+    if "jarvis" in _hook_telemetry:
+        return dict(_hook_telemetry["jarvis"])
+    if _hook_telemetry:
+        first_bot = next(iter(_hook_telemetry))
+        return dict(_hook_telemetry[first_bot])
+    return {}
 
 
 # Convenience functions for quick access

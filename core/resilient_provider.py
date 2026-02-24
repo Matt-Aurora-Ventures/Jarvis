@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
+from core.runtime_capabilities import env_flag, module_available
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -316,6 +318,8 @@ class ResilientProviderChain:
 
     def get_health_status(self) -> Dict[str, Any]:
         """Get health status of all providers."""
+        consensus_enabled = env_flag("JARVIS_USE_ARENA", True)
+        nosana_enabled = env_flag("JARVIS_USE_NOSANA", False)
         return {
             "providers": [self.breakers[p.name].get_status() for p in self.providers],
             "healthy_count": sum(
@@ -330,6 +334,19 @@ class ResilientProviderChain:
                 1 for b in self.breakers.values()
                 if b.health.state == ProviderState.FAILED
             ),
+            "routes": {
+                "consensus": {
+                    "enabled": consensus_enabled,
+                    "litellm_available": module_available("litellm"),
+                    "openrouter_key_present": bool(os.environ.get("OPENROUTER_API_KEY", "").strip()),
+                    "fallback": "local_ollama",
+                },
+                "nosana": {
+                    "enabled": nosana_enabled,
+                    "api_key_present": bool(os.environ.get("NOSANA_API_KEY", "").strip()),
+                    "fallback": "skip_heavy_compute_route",
+                },
+            },
         }
 
     async def execute_consensus(
@@ -339,10 +356,29 @@ class ResilientProviderChain:
         panel: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Execute the consensus arena route for complex queries."""
-        if os.environ.get("JARVIS_USE_ARENA", "1").strip().lower() not in ("1", "true", "yes", "on"):
+        if not env_flag("JARVIS_USE_ARENA", True):
             return {
                 "route": "local",
                 "reason": "arena_disabled",
+                "fallback": "local_ollama",
+                "consensus": None,
+                "responses": [],
+                "scoring": None,
+            }
+        if not module_available("litellm"):
+            return {
+                "route": "local",
+                "reason": "litellm_missing",
+                "fallback": "local_ollama",
+                "consensus": None,
+                "responses": [],
+                "scoring": None,
+            }
+        if not os.environ.get("OPENROUTER_API_KEY", "").strip():
+            return {
+                "route": "local",
+                "reason": "openrouter_api_key_missing",
+                "fallback": "local_ollama",
                 "consensus": None,
                 "responses": [],
                 "scoring": None,
@@ -356,10 +392,20 @@ class ResilientProviderChain:
         """
         Execute heavy workloads on Nosana decentralized GPU marketplace.
         """
-        if os.environ.get("JARVIS_USE_NOSANA", "1").strip().lower() not in ("1", "true", "yes", "on"):
+        if not env_flag("JARVIS_USE_NOSANA", False):
             return {
                 "provider": "nosana",
                 "status": "disabled",
+                "reason": "flag_disabled",
+                "fallback": "skip_heavy_compute_route",
+                "payload": payload,
+            }
+        if not os.environ.get("NOSANA_API_KEY", "").strip():
+            return {
+                "provider": "nosana",
+                "status": "unconfigured",
+                "reason": "nosana_api_key_missing",
+                "fallback": "skip_heavy_compute_route",
                 "payload": payload,
             }
 
@@ -368,6 +414,8 @@ class ResilientProviderChain:
             return {
                 "provider": "nosana",
                 "status": "unconfigured",
+                "reason": "client_unavailable",
+                "fallback": "skip_heavy_compute_route",
                 "payload": payload,
             }
         return await client.run_heavy_workload(payload)

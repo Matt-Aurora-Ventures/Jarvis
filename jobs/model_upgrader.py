@@ -216,6 +216,28 @@ class ModelUpgrader:
         state["last_scan_at"] = now.isoformat()
         self._save_state(state)
 
+    def persist_scan_result(self, result: Mapping[str, Any], now_iso: Optional[str] = None) -> None:
+        """
+        Persist both scan timestamp and last decision payload for operator dashboards.
+        """
+        now = self._parse_iso(now_iso) if now_iso else self._utc_now()
+        state = self._load_state()
+        state["last_scan_at"] = now.isoformat()
+        state["last_result"] = dict(result)
+        self._save_state(state)
+
+    def get_last_scan_summary(self) -> Dict[str, Any]:
+        state = self._load_state()
+        if not isinstance(state, dict):
+            return {}
+        summary = {}
+        last_scan_at = state.get("last_scan_at")
+        if last_scan_at:
+            summary["last_scan_at"] = last_scan_at
+        if isinstance(state.get("last_result"), dict):
+            summary["last_result"] = state.get("last_result")
+        return summary
+
     @staticmethod
     def decide_upgrade(
         current: ModelSpec,
@@ -476,14 +498,15 @@ class ModelUpgrader:
         if not ranked or current_model is None:
             frontier = self.scan_openrouter_frontier_models()
             panel_changed = self.update_arena_panel(frontier)
-            self.mark_scan_complete(now_iso=now_iso)
-            return {
+            result = {
                 "status": "completed",
                 "action": UpgradeAction.SKIP.value,
                 "reason": "insufficient_candidate_data",
                 "panel_updated": panel_changed,
                 "installed_models_count": len(installed_models),
             }
+            self.persist_scan_result(result, now_iso=now_iso)
+            return result
 
         best = ranked[0]
         action = self.decide_upgrade(current_model, best)
@@ -511,7 +534,7 @@ class ModelUpgrader:
         result["frontier_models_found"] = len(frontier)
         result["installed_models_count"] = len(installed_models)
 
-        self.mark_scan_complete(now_iso=now_iso)
+        self.persist_scan_result(result, now_iso=now_iso)
         self.log_event("weekly_scan", result)
         return result
 

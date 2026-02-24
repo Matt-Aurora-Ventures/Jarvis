@@ -9,5 +9,5 @@ crate-type = ["cdylib", "lib"]
 name = "jarvis_mesh"
 
 [dependencies]
-anchor-lang = "0.30.1"
+anchor-lang = { version = "0.30.1", features = ["init-if-needed"] }
 

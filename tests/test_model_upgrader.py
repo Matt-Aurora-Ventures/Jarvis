@@ -102,3 +102,31 @@ def test_update_arena_panel_replaces_existing_alias(tmp_path):
     updated = arena_path.read_text(encoding="utf-8")
     assert '"claude": "anthropic/new-model"' in updated
     assert "old-model" not in updated
+
+
+def test_weekly_scan_persists_last_result_for_dashboard(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "jarvis.json"
+    state_path = tmp_path / "model_upgrader_state.json"
+    arena_path = tmp_path / "arena.py"
+    cfg_path.write_text(
+        json.dumps(
+            {
+                "providers": {"ollama": {"model": "qwen2.5:7b"}},
+                "router": {"fast_model": "qwen2.5:7b"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    arena_path.write_text("PANEL: Dict[str, str] = {}\n", encoding="utf-8")
+
+    upgrader = ModelUpgrader(config_path=cfg_path, state_path=state_path, arena_path=arena_path)
+    monkeypatch.setattr(upgrader, "scan_openrouter_frontier_models", lambda: {})
+    monkeypatch.setattr(upgrader, "update_arena_panel", lambda _panel: False)
+    monkeypatch.setattr(upgrader.model_manager, "list_installed_models", lambda: [])
+
+    result = upgrader.run_weekly_scan(candidates=[], now_iso="2026-02-24T03:00:00+00:00", force=True)
+    assert result["action"] == UpgradeAction.SKIP.value
+
+    summary = upgrader.get_last_scan_summary()
+    assert summary["last_scan_at"] == "2026-02-24T03:00:00+00:00"
+    assert summary["last_result"]["action"] == UpgradeAction.SKIP.value
