@@ -84,13 +84,15 @@ jobs:
             docker image prune -f
 
   # =========================================================================
-  # Deploy to Production (on release only)
+  # Deploy to Production (On main push or manual trigger)
   # =========================================================================
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
     environment: production
+    # Requires successful completion of our python backtesting and unit testing gates
+    needs: [deploy-staging]
 
     steps:
       - uses: actions/checkout@v4
