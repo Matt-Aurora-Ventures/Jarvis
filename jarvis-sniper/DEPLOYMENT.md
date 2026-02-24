@@ -15,6 +15,9 @@ Required:
 
 - `HELIUS_GATEKEEPER_RPC_URL` (server-side Helius Gatekeeper URL; production routes fail closed without this)
 - `BAGS_API_KEY` (server-side; used by `/api/bags/quote` + `/api/bags/swap`)
+- `PERPS_SERVICE_BASE_URL` (upstream base URL for `/api/perps/*` proxy routes)
+- `INVESTMENTS_SERVICE_BASE_URL` (upstream base URL for `/api/investments/*` proxy routes)
+- `INVESTMENTS_ADMIN_TOKEN` (required bearer token for investments admin write routes)
 - `AUTONOMY_JOB_TOKEN` (bearer token required by `POST /api/autonomy/hourly`)
 - `AUTONOMY_AUDIT_BUCKET` (GCS bucket for hourly autonomy decision artifacts)
 - `XAI_API_KEY` (restricted runtime key for batch-only autonomy jobs)
@@ -24,6 +27,10 @@ Recommended:
 - `SOLANA_RPC_URL` (legacy server fallback checked after `HELIUS_GATEKEEPER_RPC_URL`)
 - `NEXT_PUBLIC_SOLANA_RPC` (client-side; use a **public** endpoint)
 - `ALLOWED_ORIGINS` (CORS allowlist for `/api/*` routes; comma-separated)
+- `BACKTEST_CLOUD_RUN_TAG_URL` (direct `https://*.a.run.app` URL used by browser backtest bypass)
+- `PERPS_PROXY_TIMEOUT_MS=6000`
+- `INVESTMENTS_PROXY_TIMEOUT_MS=6000`
+- `UPSTREAM_HEALTH_TIMEOUT_MS=2500`
 - `BAGS_REFERRAL_ACCOUNT` (optional referral account for Bags)
 - `XAI_FRONTIER_MODEL=grok-4-1-fast-reasoning`
 - `XAI_FRONTIER_FALLBACK_MODELS=grok-4-fast-reasoning,grok-4`
@@ -106,13 +113,33 @@ For `kr8tiv` (`ssrkr8tiv`, `us-central1`), set Gatekeeper URL before deploy:
 gcloud run services update ssrkr8tiv \
   --project kr8tiv \
   --region us-central1 \
-  --set-env-vars HELIUS_GATEKEEPER_RPC_URL="https://beta.helius-rpc.com/?api-key=REPLACE_ME"
+  --set-env-vars HELIUS_GATEKEEPER_RPC_URL="https://beta.helius-rpc.com/?api-key=REPLACE_ME",BACKTEST_CLOUD_RUN_TAG_URL="https://REPLACE_WITH_FIREBASE_TAG_HOST.a.run.app",PERPS_SERVICE_BASE_URL="https://REPLACE_WITH_PERPS_SERVICE.a.run.app",INVESTMENTS_SERVICE_BASE_URL="https://REPLACE_WITH_INVESTMENTS_SERVICE.a.run.app",INVESTMENTS_ADMIN_TOKEN="REPLACE_ME"
 ```
 
 Then deploy with the hardened flow:
 
 ```bash
 npm run deploy:hardened
+```
+
+After deploy, verify health exposes a non-null backtest bypass URL:
+
+```bash
+curl -s https://kr8tiv.web.app/api/health
+```
+
+Expected JSON includes:
+
+```json
+{
+  "backend": {
+    "cloudRunTagUrl": "https://...a.run.app"
+  },
+  "upstreams": {
+    "perps": { "configured": true, "ok": true },
+    "investments": { "configured": true, "ok": true }
+  }
+}
 ```
 
 ## Autonomy Scheduler + Audit Trail

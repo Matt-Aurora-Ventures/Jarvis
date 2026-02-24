@@ -50,6 +50,23 @@ export function InvestmentsPageClient() {
           <p className="mt-1 text-xs text-text-muted">
             Internal beta surface for Alvara basket operations and Jupiter perps execution panels.
           </p>
+          <a
+            href="https://t.me/kr8tivaisystems"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 block rounded-lg border border-accent-warning/35 bg-accent-warning/10 p-3 transition-colors hover:bg-accent-warning/15"
+          >
+            <div className="text-xs font-semibold uppercase tracking-wide text-accent-warning">
+              Investments Coming Soon
+            </div>
+            <p className="mt-1 text-xs text-text-secondary">
+              This section is temporarily in staged rollout while we finish reliability upgrades. Follow Telegram for
+              release updates.
+            </p>
+            <span className="mt-2 inline-block text-[11px] font-semibold text-accent-warning">
+              Get Updates on Telegram
+            </span>
+          </a>
         </section>
 
         <section className="rounded-xl border border-border-primary bg-bg-secondary p-2">

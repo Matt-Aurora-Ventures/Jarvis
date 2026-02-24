@@ -33,7 +33,7 @@ describe('strategy-selector', () => {
     expect(strongWins).toBeGreaterThanOrEqual(90);
   });
 
-  it('applyDiscountedOutcome decays all beliefs then updates selected strategy', () => {
+  it('applyDiscountedOutcome updates only selected strategy with discounted prior', () => {
     const beliefs: Record<string, StrategyBelief> = {
       a: {
         ...createDefaultStrategyBelief('a'),
@@ -61,10 +61,10 @@ describe('strategy-selector', () => {
       now: 123456,
     });
 
-    expect(next.a.alpha).toBeCloseTo(9, 6);
-    expect(next.a.beta).toBeCloseTo(4.5, 6);
-    expect(next.b.alpha).toBeCloseTo(6 * 0.9 + 1, 6);
-    expect(next.b.beta).toBeCloseTo(9 * 0.9, 6);
+    expect(next.a.alpha).toBeCloseTo(10, 6);
+    expect(next.a.beta).toBeCloseTo(5, 6);
+    expect(next.b.alpha).toBeCloseTo(1 + (6 - 1) * 0.9 + 1, 6);
+    expect(next.b.beta).toBeCloseTo(1 + (9 - 1) * 0.9, 6);
     expect(next.b.wins).toBe(6);
     expect(next.b.totalOutcomes).toBe(14);
     expect(next.b.lastOutcome).toBe('win');

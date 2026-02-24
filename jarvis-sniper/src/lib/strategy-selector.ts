@@ -73,7 +73,7 @@ function clampShape(v: number): number {
  * This is sufficient for Thompson sampling and avoids pulling in heavy deps.
  */
 function sampleGamma(shapeRaw: number): number {
-  let shape = clampShape(shapeRaw);
+  const shape = clampShape(shapeRaw);
   if (shape < 1) {
     const u = Math.random();
     return sampleGamma(shape + 1) * Math.pow(u, 1 / shape);

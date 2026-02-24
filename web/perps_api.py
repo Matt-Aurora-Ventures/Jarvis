@@ -57,6 +57,7 @@ _RUNTIME_DIR = Path(
 _INTENT_QUEUE = _RUNTIME_DIR / "intent_queue.jsonl"
 _POSITIONS_STATE = _RUNTIME_DIR / "positions_state.json"
 _INTENT_AUDIT = _RUNTIME_DIR / "intent_audit.log"
+_HISTORY_CACHE_FILE = _RUNTIME_DIR / "history_cache.json"
 _PYTH_HERMES = os.environ.get("PERPS_PYTH_HERMES_URL", "https://hermes.pyth.network")
 _PYTH_BENCHMARKS = "https://benchmarks.pyth.network"
 _DEFAULT_COLLATERAL_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
@@ -164,6 +165,78 @@ def all_prices():
     return jsonify({m: _fetch_price(m) for m in _MARKETS})
 
 
+@perps_bp.route("/ingress-health")
+def ingress_health():
+    probe_market = "SOL-USD"
+    snapshot = _fetch_price(probe_market)
+    price = float(snapshot.get("price") or 0.0)
+    has_error = bool(snapshot.get("error"))
+    ok = (price > 0) and (not has_error)
+    return jsonify({
+        "ok": ok,
+        "market": probe_market,
+        "source": "pyth-hermes",
+        "price": price,
+        "age_seconds": snapshot.get("age_seconds"),
+        "status": snapshot.get("status"),
+        "reason": snapshot.get("reason"),
+    })
+
+
+def _history_cache_key(market: str, resolution: str) -> str:
+    return f"{market.upper()}:{str(resolution).strip()}"
+
+
+def _load_history_cache() -> dict[str, Any]:
+    try:
+        if not _HISTORY_CACHE_FILE.exists():
+            return {}
+        payload = json.loads(_HISTORY_CACHE_FILE.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        logger.debug("Failed reading history cache", exc_info=True)
+    return {}
+
+
+def _save_history_cache(cache: dict[str, Any]) -> None:
+    try:
+        _RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        _HISTORY_CACHE_FILE.write_text(json.dumps(cache, sort_keys=True), encoding="utf-8")
+    except Exception:
+        logger.debug("Failed writing history cache", exc_info=True)
+
+
+def _store_history_snapshot(market: str, resolution: str, candles: list[dict[str, Any]]) -> None:
+    if not candles:
+        return
+    cache = _load_history_cache()
+    cache[_history_cache_key(market, resolution)] = {
+        "cached_at": int(time.time()),
+        "candles": candles,
+    }
+    _save_history_cache(cache)
+
+
+def _load_history_snapshot(market: str, resolution: str) -> dict[str, Any] | None:
+    cache = _load_history_cache()
+    entry = cache.get(_history_cache_key(market, resolution))
+    if not isinstance(entry, dict):
+        return None
+    candles = entry.get("candles")
+    if not isinstance(candles, list) or not candles:
+        return None
+    cached_at_raw = entry.get("cached_at")
+    try:
+        cached_at = int(cached_at_raw) if cached_at_raw is not None else None
+    except Exception:
+        cached_at = None
+    return {
+        "cached_at": cached_at,
+        "candles": candles,
+    }
+
+
 # ── Price History (Pyth Benchmarks) ──────────────────────────────────────────
 
 @perps_bp.route("/history/<market>")
@@ -200,24 +273,38 @@ def price_history(market: str):
                     "low": data["l"][i],
                     "close": data["c"][i],
                 })
-            return jsonify({"market": m, "resolution": resolution, "candles": candles})
-        return jsonify({
+            _store_history_snapshot(m, resolution, candles)
+            return jsonify({"market": m, "resolution": resolution, "candles": candles, "stale": False})
+
+        response = {
             "market": m,
             "candles": [],
             "error": data.get("s", "no_data"),
             "status": None,
             "reason": data.get("s", "no_data"),
-        })
+        }
+        cached = _load_history_snapshot(m, resolution)
+        if cached:
+            response["candles"] = cached["candles"]
+            response["stale"] = True
+            response["cached_at"] = cached.get("cached_at")
+        return jsonify(response)
     except Exception as exc:
         logger.warning("History fetch failed for %s: %s", m, exc)
         meta = _exception_meta(exc)
-        return jsonify({
+        response = {
             "market": m,
             "candles": [],
             "error": "fetch_failed",
             "status": meta["status"],
             "reason": meta["reason"],
-        })
+        }
+        cached = _load_history_snapshot(m, resolution)
+        if cached:
+            response["candles"] = cached["candles"]
+            response["stale"] = True
+            response["cached_at"] = cached.get("cached_at")
+        return jsonify(response)
 
 
 # ── Runtime Status ────────────────────────────────────────────────────────────

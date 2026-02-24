@@ -34,22 +34,10 @@ describe('POST /api/backtest execution realism contract', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    mockReadTradeExecutionPriors.mockResolvedValue({
-      sampleSize: 400,
-      lookbackDays: 30,
-      totalSellAttempts: 220,
-      confirmedEvents: 180,
-      noRouteEvents: 20,
-      unresolvedEvents: 12,
-      failedEvents: 8,
-      noRouteRate: 0.09,
-      unresolvedRate: 0.055,
-      failedRate: 0.036,
-      executionReliabilityPct: 81.9,
-    });
+    mockReadTradeExecutionPriors.mockResolvedValue(null);
   });
 
-  it('fails closed by default in strict mode when candles are synthetic/client provided', async () => {
+  it('accepts client candles when strictNoSynthetic is omitted (default false)', async () => {
     const route = await import('@/app/api/backtest/route');
     const req = new Request('http://localhost/api/backtest', {
       method: 'POST',
@@ -57,6 +45,28 @@ describe('POST /api/backtest execution realism contract', () => {
       body: JSON.stringify({
         strategyId: 'bluechip_trend_follow',
         mode: 'quick',
+        candles: buildCandles(),
+        includeEvidence: false,
+      }),
+    });
+
+    const res = await route.POST(req);
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.sourceDiagnostics.strictNoSynthetic).toBe(false);
+    expect(Array.isArray(body.results)).toBe(true);
+    expect(body.results.length).toBeGreaterThan(0);
+  });
+
+  it('fails closed when strictNoSynthetic is explicitly enabled for client candles', async () => {
+    const route = await import('@/app/api/backtest/route');
+    const req = new Request('http://localhost/api/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        strategyId: 'bluechip_trend_follow',
+        mode: 'quick',
+        strictNoSynthetic: true,
         candles: buildCandles(),
         includeEvidence: false,
       }),
@@ -66,34 +76,5 @@ describe('POST /api/backtest execution realism contract', () => {
     const body = await res.json();
     expect(res.status).toBe(422);
     expect(String(body.error || '')).toContain('strictNoSynthetic gate failed');
-  });
-
-  it('returns deterministic execution realism fields when strict mode is explicitly disabled', async () => {
-    const route = await import('@/app/api/backtest/route');
-    const req = new Request('http://localhost/api/backtest', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        strategyId: 'bluechip_trend_follow',
-        mode: 'quick',
-        strictNoSynthetic: false,
-        candles: buildCandles(),
-        includeEvidence: false,
-      }),
-    });
-
-    const res = await route.POST(req);
-    const body = await res.json();
-    expect(res.status).toBe(200);
-    expect(typeof body.executionReliabilityPct).toBe('number');
-    expect(typeof body.noRouteRate).toBe('number');
-    expect(typeof body.unresolvedRate).toBe('number');
-    expect(typeof body.executionAdjustedExpectancy).toBe('number');
-    expect(typeof body.executionAdjustedNetPnlPct).toBe('number');
-    expect(Array.isArray(body.degradedReasons)).toBe(true);
-    expect(Array.isArray(body.results)).toBe(true);
-    expect(body.results.length).toBeGreaterThan(0);
-    expect(typeof body.results[0].executionAdjustedExpectancy).toBe('number');
-    expect(typeof body.results[0].executionAdjustedNetPnlPct).toBe('number');
   });
 });

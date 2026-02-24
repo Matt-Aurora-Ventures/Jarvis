@@ -48,8 +48,8 @@ import {
 // Evidence downloads rely on Node.js filesystem fallback in dev/serverless.
 export const runtime = 'nodejs';
 
-// Allow up to 5 minutes for thorough backtests (26 strategies × multiple tokens).
-export const maxDuration = 300;
+// Allow up to 15 minutes for thorough backtests (26 strategies × multiple tokens).
+export const maxDuration = 900;
 
 export function OPTIONS(request: Request) {
   return backtestCorsOptions(request);

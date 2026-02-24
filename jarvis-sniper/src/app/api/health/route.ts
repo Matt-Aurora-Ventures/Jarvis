@@ -7,7 +7,28 @@ import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
  *
  * GET /api/health
  */
+function normalizeCloudRunTagUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(candidate);
+    const hostname = String(parsed.hostname || '').trim().toLowerCase();
+    if (parsed.protocol !== 'https:') return null;
+    if (!hostname.endsWith('.a.run.app')) return null;
+    return `https://${hostname}`;
+  } catch {
+    return null;
+  }
+}
+
 function deriveCloudRunTagUrl(request: Request): string | null {
+  // Preferred explicit source for deterministic backtest bypass in custom-domain setups.
+  const fromEnv = normalizeCloudRunTagUrl(process.env.BACKTEST_CLOUD_RUN_TAG_URL);
+  if (fromEnv) return fromEnv;
+
   // Firebase Hosting / App Hosting rewrites to Cloud Run may preserve the original host in
   // forwarded headers, while the direct Cloud Run host remains available as another header.
   // We only return Cloud Run hosts (`*.a.run.app`) to support backtest bypass of Hosting 60s.
@@ -22,15 +43,82 @@ function deriveCloudRunTagUrl(request: Request): string | null {
     if (!raw) continue;
     const first = String(raw).split(',')[0]?.trim() || '';
     if (!first) continue;
-    const withoutScheme = first.replace(/^https?:\/\//i, '').trim();
-    const hostOnly = withoutScheme.split('/')[0]?.trim() || '';
-    const hostname = hostOnly.includes(':') ? hostOnly.split(':')[0] : hostOnly;
-    if (hostname.endsWith('.a.run.app')) {
-      return `https://${hostname}`;
-    }
+    const normalized = normalizeCloudRunTagUrl(first);
+    if (normalized) return normalized;
   }
 
   return null;
+}
+
+type UpstreamCheck = {
+  configured: boolean;
+  baseUrl: string | null;
+  ok: boolean | null;
+  statusCode: number | null;
+  latencyMs: number | null;
+  error: string | null;
+};
+
+const DEFAULT_UPSTREAM_HEALTH_TIMEOUT_MS = 2500;
+
+function upstreamHealthTimeoutMs(): number {
+  const raw = Number(process.env.UPSTREAM_HEALTH_TIMEOUT_MS || DEFAULT_UPSTREAM_HEALTH_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_UPSTREAM_HEALTH_TIMEOUT_MS;
+  return Math.floor(raw);
+}
+
+function normalizeHttpBaseUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    if (!/^https?:$/i.test(parsed.protocol)) return null;
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return null;
+  }
+}
+
+async function checkUpstream(base: string | null, path: string): Promise<UpstreamCheck> {
+  if (!base) {
+    return {
+      configured: false,
+      baseUrl: null,
+      ok: null,
+      statusCode: null,
+      latencyMs: null,
+      error: null,
+    };
+  }
+
+  const started = Date.now();
+  try {
+    const signal = AbortSignal.timeout(upstreamHealthTimeoutMs());
+    const res = await fetch(`${base}${path}`, {
+      method: 'GET',
+      cache: 'no-store',
+      signal,
+    });
+    return {
+      configured: true,
+      baseUrl: base,
+      ok: res.ok,
+      statusCode: res.status,
+      latencyMs: Date.now() - started,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      baseUrl: base,
+      ok: false,
+      statusCode: null,
+      latencyMs: Date.now() - started,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export async function GET(request: Request) {
@@ -47,6 +135,11 @@ export async function GET(request: Request) {
     qpm: Number(process.env.XAI_KEY_RATE_QPM || 12),
     tpm: Number(process.env.XAI_KEY_RATE_TPM || 120000),
   };
+  const perpsUpstream = await checkUpstream(normalizeHttpBaseUrl(process.env.PERPS_SERVICE_BASE_URL), '/api/perps/status');
+  const investmentsUpstream = await checkUpstream(
+    normalizeHttpBaseUrl(process.env.INVESTMENTS_SERVICE_BASE_URL),
+    '/api/investments/performance?hours=24',
+  );
   const checks = {
     status: 'ok' as 'ok' | 'degraded' | 'error',
     timestamp: new Date().toISOString(),
@@ -69,6 +162,10 @@ export async function GET(request: Request) {
       url: rpcConfig.sanitizedUrl,
       diagnostic: rpcConfig.diagnostic,
     },
+    upstreams: {
+      perps: perpsUpstream,
+      investments: investmentsUpstream,
+    },
     autonomy: {
       enabled: autonomyEnabled,
       applyOverrides: autonomyApplyOverrides,
@@ -88,6 +185,14 @@ export async function GET(request: Request) {
 
   // Degraded if missing critical env vars
   if (!checks.env.bagsApiKey || !checks.rpc.configured) {
+    checks.status = 'degraded';
+  }
+
+  if (!perpsUpstream.configured || !investmentsUpstream.configured) {
+    checks.status = 'degraded';
+  }
+
+  if ((perpsUpstream.configured && !perpsUpstream.ok) || (investmentsUpstream.configured && !investmentsUpstream.ok)) {
     checks.status = 'degraded';
   }
 

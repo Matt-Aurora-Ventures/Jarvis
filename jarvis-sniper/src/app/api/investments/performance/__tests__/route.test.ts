@@ -31,4 +31,25 @@ describe('GET /api/investments/performance', () => {
       expect.objectContaining({ method: 'GET' }),
     );
   });
+
+  it('returns fallback payload when upstream is unavailable', async () => {
+    const mockFetch = vi.mocked(fetch);
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'Investments upstream unavailable' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const route = await import('@/app/api/investments/performance/route');
+    const res = await route.GET(new Request('http://localhost/api/investments/performance?hours=24'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.basket_id).toBe('alpha');
+    expect(body.hours).toBe(24);
+    expect(Array.isArray(body.points)).toBe(true);
+    expect(body.change_pct).toBe(0);
+    expect(body._fallback).toBe(true);
+  });
 });

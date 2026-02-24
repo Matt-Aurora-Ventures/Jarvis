@@ -21,6 +21,7 @@
 - [What Jarvis Is](#-what-jarvis-is)
 - [Why Crypto First (But Not Crypto Only)](#-why-crypto-first-but-not-crypto-only)
 - [The Architecture: A Mesh of Smart Agents](#-the-architecture-a-mesh-of-smart-agents)
+- [Mission Control + OpenClaw Expansion Blueprint](#mission-control--openclaw-expansion-blueprint)
 - [Economic Model: Open Source First](#-economic-model-open-source-first)
 - [What Jarvis Does Today](#-what-jarvis-does-today)
 - [Core Capabilities](#-core-capabilities)
@@ -243,6 +244,39 @@ Every autonomous action is:
 - Gated by permission levels
 
 You remain in control. Always.
+
+## Mission Control + OpenClaw Expansion Blueprint
+
+Jarvis is now explicitly split into two cooperating planes:
+
+- `OpenClaw harness` for execution, autonomy, and user-facing actions
+- `Mission Control` for governance, evaluation, versioning, and promotion
+
+This split keeps systems fast and expressive without uncontrolled drift.
+
+### Why this matters
+
+- Avoids "per-agent prompt hacking" across the fleet
+- Preserves personality and autonomy while keeping behavior measurable
+- Supports both individual users and enterprise teams from one architecture
+
+### Product lanes
+
+- `Personal lane`: private, local-first, fast setup, focused on life/work automation
+- `Enterprise lane`: role-aware teams, domain packs (HR, legal, infra, engineering), audit-ready operations
+
+### Core boundary
+
+| Layer | Primary owner |
+|---|---|
+| Agent runtime, tools, user interaction | OpenClaw harness |
+| Prompt/context registry, evals, promotion gates, rollback | Mission Control |
+
+### Source of truth
+
+The complete staged roadmap, boundaries, and scaling model are documented in:
+
+- [`docs/architecture/MISSION_CONTROL_OPENCLAW_EXPANSION.md`](docs/architecture/MISSION_CONTROL_OPENCLAW_EXPANSION.md)
 
 ---
 

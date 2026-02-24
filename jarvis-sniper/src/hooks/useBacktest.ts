@@ -105,6 +105,61 @@ interface ResponseErrorEnvelope {
   runMissing?: boolean;
 }
 
+interface NormalizeBacktestErrorArgs {
+  status: number;
+  contentType?: string | null;
+  body?: string | null;
+  fallback?: string;
+}
+
+type StoreBacktestUpdater = {
+  updatePresetBacktestResults?: (results: ReturnType<typeof buildPresetBacktestUpdates>) => void;
+};
+
+export function normalizeBacktestCloudRunUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    const hostname = String(parsed.hostname || '').trim().toLowerCase();
+    if (parsed.protocol !== 'https:') return null;
+    if (!hostname.endsWith('.a.run.app')) return null;
+    return `https://${hostname}`;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeBacktestErrorMessage(args: NormalizeBacktestErrorArgs): string {
+  const fallback = args.fallback || `HTTP ${args.status}`;
+  const text = String(args.body || '').trim();
+  if (!text) return fallback;
+
+  const contentType = String(args.contentType || '').toLowerCase();
+  const htmlLike =
+    contentType.includes('text/html') ||
+    /^<!doctype html/i.test(text) ||
+    /^<html/i.test(text) ||
+    /<title>.*<\/title>/i.test(text);
+
+  if (args.status >= 500 && htmlLike) {
+    return `Backtest request failed at edge (HTTP ${args.status}). The server may still be processing this run; monitoring will continue if status is available.`;
+  }
+
+  return text.length > 280 ? `${text.slice(0, 277)}...` : text;
+}
+
+export function stallThresholdForMode(
+  mode: 'quick' | 'full' | 'grid',
+  dataScale: BacktestDataScale,
+): number {
+  if (mode === 'quick' && dataScale === 'fast') return 360_000;
+  if (mode === 'quick' && dataScale === 'thorough') return 600_000;
+  return 900_000;
+}
+
 function loadCachedResults(): Partial<BacktestRunState> {
   if (typeof window === 'undefined') return {};
   try {
@@ -321,11 +376,11 @@ export function useBacktest() {
     }));
   }, []);
 
-  const stallThresholdFor = useCallback((mode: 'quick' | 'full' | 'grid', dataScale: BacktestDataScale): number => {
-    if (mode === 'quick' && dataScale === 'fast') return 240_000;
-    if (mode === 'quick' && dataScale === 'thorough') return 420_000;
-    return 600_000;
-  }, []);
+  const stallThresholdFor = useCallback(
+    (mode: 'quick' | 'full' | 'grid', dataScale: BacktestDataScale): number =>
+      stallThresholdForMode(mode, dataScale),
+    [],
+  );
 
   const resolveBacktestBaseUrl = useCallback(async (): Promise<string> => {
     if (typeof window === 'undefined') return '';
@@ -336,11 +391,8 @@ export function useBacktest() {
       const res = await fetch('/api/health', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
-        const candidate = String(json?.backend?.cloudRunTagUrl || '').trim();
-        // Only accept Cloud Run domains to bypass Firebase Hosting front-door timeouts.
-        if (/^https:\/\/.+\.a\.run\.app$/i.test(candidate)) {
-          base = candidate.replace(/\/+$/, '');
-        }
+        const candidate = normalizeBacktestCloudRunUrl(json?.backend?.cloudRunTagUrl);
+        if (candidate) base = candidate;
       }
     } catch {
       // fall back to same-origin
@@ -374,8 +426,8 @@ export function useBacktest() {
 
   const readErrorFromResponse = useCallback(async (res: Response): Promise<ResponseErrorEnvelope> => {
     const fallback = `HTTP ${res.status}`;
+    const contentType = String(res.headers.get('content-type') || '').toLowerCase();
     try {
-      const contentType = String(res.headers.get('content-type') || '').toLowerCase();
       if (contentType.includes('application/json')) {
         const payload = await res.json();
         return {
@@ -387,14 +439,21 @@ export function useBacktest() {
           runMissing: payload?.runMissing === true,
         };
       }
-      const text = (await res.text()).trim();
-      if (!text) return { status: res.status, message: fallback };
+      const text = await res.text();
       return {
         status: res.status,
-        message: text.length > 280 ? `${text.slice(0, 277)}...` : text,
+        message: normalizeBacktestErrorMessage({
+          status: res.status,
+          contentType,
+          body: text,
+          fallback,
+        }),
       };
     } catch {
-      return { status: res.status, message: fallback };
+      return {
+        status: res.status,
+        message: normalizeBacktestErrorMessage({ status: res.status, contentType, fallback }),
+      };
     }
   }, []);
 
@@ -562,7 +621,7 @@ export function useBacktest() {
     } catch {
       return null;
     }
-  }, [fetchArtifacts, readErrorFromResponse]);
+  }, [fetchArtifacts, readErrorFromResponse, resolveBacktestBaseUrl]);
 
   const startPolling = useCallback((runId: string) => {
     if (pollTimerRef.current != null) {
@@ -744,8 +803,7 @@ export function useBacktest() {
         }
 
         // Wire to Zustand store — guard against missing action (added in Plan 03)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const storeState = useSniperStore.getState() as any;
+        const storeState = useSniperStore.getState() as StoreBacktestUpdater;
         const updatePresets = storeState.updatePresetBacktestResults;
         // Only sync "quick" runs into the live presets. Grid/walk-forward results
         // are exploratory and shouldn't overwrite the active preset metadata.
@@ -774,7 +832,15 @@ export function useBacktest() {
         }
       }
     },
-    [fetchArtifacts, pollRunStatusOnce, readErrorFromResponse, startPolling, stopPolling],
+    [
+      fetchArtifacts,
+      pollRunStatusOnce,
+      readErrorFromResponse,
+      resolveBacktestBaseUrl,
+      stallThresholdFor,
+      startPolling,
+      stopPolling,
+    ],
   );
 
   /**

@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server';
 
 const DEFAULT_PERPS_BASE_URL = 'http://127.0.0.1:5001';
+const DEFAULT_PERPS_TIMEOUT_MS = 6000;
 const ALLOWED_HISTORY_MARKETS = new Set(['SOL-USD', 'BTC-USD', 'ETH-USD']);
 
 function baseUrl(): string {
   return String(process.env.PERPS_SERVICE_BASE_URL || DEFAULT_PERPS_BASE_URL).trim().replace(/\/+$/, '');
+}
+
+function requestTimeoutMs(): number {
+  const raw = Number(process.env.PERPS_PROXY_TIMEOUT_MS || DEFAULT_PERPS_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_PERPS_TIMEOUT_MS;
+  return Math.floor(raw);
 }
 
 function upstreamUrl(path: string, query?: URLSearchParams): string {
@@ -37,10 +44,21 @@ async function responseFromUpstream(upstream: Response): Promise<NextResponse> {
 }
 
 function networkError(error: unknown): NextResponse {
+  if (error instanceof Error && error.name === 'AbortError') {
+    return NextResponse.json(
+      {
+        error: 'Perps upstream timeout',
+        code: 'UPSTREAM_TIMEOUT',
+      },
+      { status: 504 },
+    );
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   return NextResponse.json(
     {
       error: 'Perps upstream unavailable',
+      code: 'UPSTREAM_UNAVAILABLE',
       details: message,
     },
     { status: 502 },
@@ -56,10 +74,12 @@ export async function proxyPerpsGet(path: string, request: Request): Promise<Nex
     const url = new URL(request.url);
     const token = extractBearerToken(request);
     const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+    const signal = AbortSignal.timeout(requestTimeoutMs());
     const upstream = await fetch(upstreamUrl(path, url.searchParams), {
       method: 'GET',
       headers,
       cache: 'no-store',
+      signal,
     });
     return await responseFromUpstream(upstream);
   } catch (error) {
@@ -75,11 +95,13 @@ export async function proxyPerpsPost(path: string, request: Request): Promise<Ne
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+    const signal = AbortSignal.timeout(requestTimeoutMs());
     const upstream = await fetch(upstreamUrl(path), {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
       cache: 'no-store',
+      signal,
     });
     return await responseFromUpstream(upstream);
   } catch (error) {
