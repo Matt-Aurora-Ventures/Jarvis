@@ -4,27 +4,28 @@
 ## Phase 1: Core Backtesting Infrastructure [PyTorch]
 - Target: Build the structural data pipeline and PyTorch modeling logic to accurately tune the algorithmic traders.
 - Deliverables:
-  - CoinGecko ingestion wrappers for historical resolution.
-  - PyTorch training scripts covering all current sniper capabilities.
-  - Automated continuous backtesting action to auto-tune hyper-parameters in production configurations.
+  - `CoinGeckoFetcher` ingestion wrapper for historical resolution.
+  - PyTorch/ML model and tuning scaffolds for sniper capabilities (`base_sniper`, `sentiment_finetuner`, Optuna tuning modules).
+  - Continuous algo-loop workflow for real-data backtest refresh and tuning artifact generation.
 
 ## Phase 2: Open Claw & Jupiter Perps Repair
 - Target: Fix the broken Jupiter perpetuals trader, integrate signals, and decouple the open-claw algorithmic logic for Solana.
 - Deliverables:
-  - Repaired perpetuals logic / bot execution.
-  - Signal integration from external systems (Bags.fm/X).
-  - Open Claw endpoint/UI or accessible SDK.
+  - `JupiterPerpsAnchorClient` + runner execution path for perpetuals orchestration.
+  - Signal intake and strategy mapping paths for external/macro intel integration.
+  - Accessible `OpenClawSDK` entrypoint for decoupled algorithmic logic.
 
 ## Phase 3: Specialized Snipers (Alvara & TradFi)
 - Target: Complete the Grok-managed basket integration (Alvara) and inject Traditional Finance options data triggers into the Solana trading pipeline.
 - Deliverables:
-  - Working Alvara Protocol ERC-7621 test and dev setup.
-  - Solana "TradFi Options" strategy execution code without error looping.
+  - `GrokAllocator` basket-weight validation and Alvara runner wiring for ERC-7621-oriented flows.
+  - TradFi preset mapping + execution runner with guarded non-execution paths for neutral/invalid conditions.
 
 ## Phase 4: CI/CD & Production Push Automation
 - Target: Implement strict push-to-live pipelines seamlessly to eliminate friction holding back the updated algorithms.
 - Deliverables:
-  - Automated deployment triggers for newly tuned `kr8tiv.web.app` and `jarvislife.cloud` bot logic based on test outcomes.
+  - CI gates (`ci.yml`, `python-testing.yml`) aligned with Python and web validation surfaces.
+  - Deploy pipelines for `kr8tiv.web.app` and `jarvislife.cloud`, with production release flow tied to validated test gates.
 
 ---
 *Last Updated: 2026-02-24*
