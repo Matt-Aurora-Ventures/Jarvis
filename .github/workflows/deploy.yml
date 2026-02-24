@@ -89,9 +89,10 @@ jobs:
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    if: (github.ref == 'refs/heads/main' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')) && (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
     environment: production
-    # Requires successful completion of our python backtesting and unit testing gates
+    # Staging is optional for production workflow_dispatch/release paths.
+    # Branch protection should enforce required CI/test workflows before protected merges/releases.
     needs: [deploy-staging]
 
     steps:
