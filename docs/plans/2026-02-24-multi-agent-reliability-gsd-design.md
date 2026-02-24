@@ -197,8 +197,8 @@ Safety rules:
 ### 6.5 Always-on channel listeners (group mode)
 
 Mission Control owns channel ingress for team collaboration channels:
-- Telegram group listener always-on.
-- WhatsApp group listener always-on.
+- Telegram group listener always-on (day-1 mandatory).
+- WhatsApp group listener phase-2 after Telegram hardening.
 - Message normalization to a shared task/event schema.
 - De-duplication and idempotency to avoid duplicate task creation.
 - Channel ack/receipt logged to support troubleshooting and SLA reporting.
@@ -293,6 +293,7 @@ Mitigation: explicit baseline bootstrap checklist in implementation plan.
 - Mission Control is the canonical ingress/orchestration layer for all team tasks.
 - New skills can be ingested and routed safely without manual container drift.
 - Telegram and WhatsApp group listeners remain active and can create/route tasks continuously.
+  - Delivery policy: Telegram day-1, WhatsApp after Telegram stability gate passes.
 - Individual agents can run end-to-end GSD lifecycle without orchestrator dependency.
 - In individual mode, high-risk actions are blocked until explicit owner approval.
 - Deployment is GitHub-driven from kr8tiv-team-execution-resilience.
@@ -308,5 +309,6 @@ Mitigation: explicit baseline bootstrap checklist in implementation plan.
 - Team architecture: global orchestrator + standby + heterogeneous specialist agents.
 - Task governance: GSD protocol integrated directly into Mission Control task lifecycle.
 - Channel operations: always-on Telegram and WhatsApp group task listeners.
+  - Rollout: WhatsApp enabled in phase-2 after Telegram hardening and stability verification.
 - Skill operations: validated hot skill ingestion with policy-gated execution.
 - Individual mode: no orchestrator gate, but same framework with owner approval on high-risk actions.
