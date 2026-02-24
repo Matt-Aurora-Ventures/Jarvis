@@ -7,8 +7,8 @@ on:
     branches: [main, develop]
 
 jobs:
-  perps-ingress-contract:
-    name: Perps Ingress Contract
+  python-validation:
+    name: Python Validation Matrix
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,17 +19,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio
-      - name: Run canonical ingress tests
+          pip install pytest pytest-asyncio torch pandas optuna web3 solders anchorpy pyarrow
+      - name: Run Python validation matrix
         run: |
-          python -m pytest \
-            tests/test_execution_intent.py \
-            tests/test_runner_external_queue.py \
-            tests/test_perps_api_ingress.py \
-            -q
+          export PYTHONPATH="."
+          pytest core/open_claw/tests/ \
+                 core/backtest/data_ingestion/tests/ \
+                 bots/tradfi_sniper/tests/ \
+                 core/intel/tests/ \
+                 tests/backtesting/ \
+                 -q
 
-  jarvis-sniper-readiness:
-    name: Jarvis Sniper Readiness
+  web-validation:
+    name: Web Validation Matrix
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,15 +48,46 @@ jobs:
           else
             npm install --no-audit --no-fund
           fi
-      - name: Run distributed-state + store tests
+      - name: Lint
+        run: npm run lint
+
+      - name: Test (phase core suites)
         run: |
           npm run test -- \
             src/lib/__tests__/cache-provider.test.ts \
             src/lib/__tests__/rate-limit-provider.test.ts \
             src/lib/__tests__/server-cache.test.ts \
-            src/stores/__tests__/useSniperStore.test.ts
-      - name: Build canonical frontend
+            src/stores/__tests__/useSniperStore.test.ts \
+            src/app/api/health/__tests__/route.test.ts \
+            src/hooks/__tests__/useBacktest-transport.test.ts \
+            src/lib/__tests__/backtest-cors.test.ts
+
+      - name: Build
         run: npm run build
+
+  backtest-validation:
+    name: Backtest Contract Matrix
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jarvis-sniper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+      - name: Run backtest realism contract tests
+        run: |
+          npm run test -- \
+            src/__tests__/backtest-route-execution-realism.test.ts \
+            src/__tests__/rpc-and-backtest-regressions.test.ts
 
   prod-dependency-risk:
     name: Production Dependency Risk
