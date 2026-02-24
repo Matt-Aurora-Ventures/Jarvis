@@ -8,6 +8,7 @@ This directory contains comprehensive architecture documentation for the Jarvis/
 |----------|-------------|
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Current system architecture - API layer, bot ecosystem, database schema, monitoring |
 | **[DISTRIBUTED_MULTI_AGENT_ARCHITECTURE.md](DISTRIBUTED_MULTI_AGENT_ARCHITECTURE.md)** | Production scaling architecture - multi-agent swarm, distributed deployment, scaling roadmap from 32GB VPS to multi-cloud |
+| **[MISSION_CONTROL_OPENCLAW_EXPANSION.md](MISSION_CONTROL_OPENCLAW_EXPANSION.md)** | Product and architecture blueprint for the Mission Control + OpenClaw self-improving platform (personal + enterprise lanes) |
 | **[BAGS_INTEGRATION_ARCHITECTURE.md](BAGS_INTEGRATION_ARCHITECTURE.md)** | bags.fm integration architecture |
 | **[DASHBOARD_ARCHITECTURE.md](DASHBOARD_ARCHITECTURE.md)** | Web dashboard and data engine architecture |
 | **[SYSTEM_AUDIT.md](SYSTEM_AUDIT.md)** | System audit and component analysis |

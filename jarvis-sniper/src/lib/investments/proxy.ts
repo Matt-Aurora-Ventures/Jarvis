@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 
 const DEFAULT_INVESTMENTS_BASE_URL = 'http://127.0.0.1:8770';
+const DEFAULT_INVESTMENTS_TIMEOUT_MS = 6000;
 
 function baseUrl(): string {
   return String(process.env.INVESTMENTS_SERVICE_BASE_URL || DEFAULT_INVESTMENTS_BASE_URL).trim().replace(/\/+$/, '');
+}
+
+function requestTimeoutMs(): number {
+  const raw = Number(process.env.INVESTMENTS_PROXY_TIMEOUT_MS || DEFAULT_INVESTMENTS_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_INVESTMENTS_TIMEOUT_MS;
+  return Math.floor(raw);
 }
 
 function upstreamUrl(path: string, query?: URLSearchParams): string {
@@ -36,10 +43,21 @@ async function responseFromUpstream(upstream: Response): Promise<NextResponse> {
 }
 
 function networkError(error: unknown): NextResponse {
+  if (error instanceof Error && error.name === 'AbortError') {
+    return NextResponse.json(
+      {
+        error: 'Investments upstream timeout',
+        code: 'UPSTREAM_TIMEOUT',
+      },
+      { status: 504 },
+    );
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   return NextResponse.json(
     {
       error: 'Investments upstream unavailable',
+      code: 'UPSTREAM_UNAVAILABLE',
       details: message,
     },
     { status: 502 },
@@ -75,10 +93,12 @@ export async function proxyInvestmentsGet(path: string, request: Request): Promi
     const url = new URL(request.url);
     const token = extractBearerToken(request);
     const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+    const signal = AbortSignal.timeout(requestTimeoutMs());
     const upstream = await fetch(upstreamUrl(path, url.searchParams), {
       method: 'GET',
       headers,
       cache: 'no-store',
+      signal,
     });
     return await responseFromUpstream(upstream);
   } catch (error) {
@@ -94,11 +114,13 @@ export async function proxyInvestmentsPost(path: string, request: Request): Prom
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+    const signal = AbortSignal.timeout(requestTimeoutMs());
     const upstream = await fetch(upstreamUrl(path), {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
       cache: 'no-store',
+      signal,
     });
     return await responseFromUpstream(upstream);
   } catch (error) {

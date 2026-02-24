@@ -12,17 +12,15 @@ vi.mock('@/lib/autonomy/audit-store', () => ({
 }));
 
 const mockGetBatch = vi.fn();
-const mockGetFileContent = vi.fn();
-const mockCreateBatch = vi.fn();
-const mockUploadBatchInputFile = vi.fn();
-const mockListModels = vi.fn();
+const mockGetBatchResults = vi.fn();
 
 vi.mock('@/lib/xai/client', () => ({
   getBatch: mockGetBatch,
-  getFileContent: mockGetFileContent,
-  createBatch: mockCreateBatch,
-  uploadBatchInputFile: mockUploadBatchInputFile,
-  listModels: mockListModels,
+  getBatchResults: mockGetBatchResults,
+  createBatch: vi.fn(),
+  addBatchRequests: vi.fn(),
+  listModels: vi.fn(),
+  XaiApiError: class XaiApiError extends Error {},
 }));
 
 const mockGetStrategyOverrideSnapshot = vi.fn();
@@ -51,20 +49,76 @@ function previousCycleId(current: string): string {
   return cycleIdFrom(prev);
 }
 
-function makeBatchOutputJsonl(args: { cycleId: string; decision: unknown; critique: unknown }): string {
-  const row = (customId: string, payload: unknown) => JSON.stringify({
-    custom_id: customId,
+function makeBatchResults(args: { cycleId: string; decision: unknown; critique: unknown }) {
+  const row = (batchRequestId: string, payload: unknown) => ({
+    batch_request_id: batchRequestId,
     response: {
-      body: {
+      completion_response: {
         choices: [{ message: { content: JSON.stringify(payload) } }],
         usage: { prompt_tokens: 10, completion_tokens: 20 },
       },
     },
   });
+
   return [
     row(`${args.cycleId}:decision`, args.decision),
     row(`${args.cycleId}:self_critique`, args.critique),
-  ].join('\n');
+  ];
+}
+
+function makePendingState(currentCycle: string, pendingCycle: string) {
+  return {
+    updatedAt: new Date(0).toISOString(),
+    latestCycleId: currentCycle,
+    latestCompletedCycleId: undefined,
+    pendingBatch: {
+      cycleId: pendingCycle,
+      batchId: 'batch-1',
+      requestIds: [`${pendingCycle}:decision`, `${pendingCycle}:self_critique`],
+      model: 'grok-4-1-fast-reasoning',
+      submittedAt: new Date().toISOString(),
+      matrix: {
+        cycleId: pendingCycle,
+        generatedAt: new Date().toISOString(),
+        wrGatePolicy: {
+          primaryPct: 70,
+          fallbackPct: 50,
+          minTrades: 1000,
+          method: 'wilson95_lower',
+          scope: 'memecoin_bags',
+        },
+        strategyRows: [],
+        metrics: {
+          liquidityRegime: { sampleSize: 0, avgLiquidityUsd: 0, medianLiquidityUsd: 0, avgMomentum1h: 0, avgVolLiqRatio: 0 },
+          thompsonBeliefs: { availability: 'unavailable_server_scope', reason: 'n/a', rows: [] },
+          reliability: { confirmed: 0, unresolved: 0, failed: 0 },
+          realized: { totalPnlSol: 0, winCount: 0, lossCount: 0, tradeCount: 0, drawdownPct: 0 },
+        },
+        tokenBudget: { maxInputTokens: 1, maxOutputTokens: 1, estimatedInputTokens: 1 },
+      },
+      matrixHash: 'mhash',
+    },
+    cycles: {
+      [currentCycle]: {
+        cycleId: currentCycle,
+        status: 'noop',
+        reasonCode: 'AUTONOMY_NOOP_DISABLED',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        matrixHash: 'x',
+      },
+      [pendingCycle]: {
+        cycleId: pendingCycle,
+        status: 'pending',
+        reasonCode: 'AUTONOMY_PENDING_BATCH',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        batchId: 'batch-1',
+        matrixHash: 'mhash',
+      },
+    },
+    budgetUsageByDay: {},
+  };
 }
 
 describe('autonomy apply gate', () => {
@@ -77,6 +131,16 @@ describe('autonomy apply gate', () => {
 
     mockWriteHourlyArtifact.mockResolvedValue({ key: 'k', sha256: 'h' });
     mockGetStrategyOverrideSnapshot.mockResolvedValue(null);
+    mockGetBatch.mockResolvedValue({
+      batch_id: 'batch-1',
+      state: {
+        num_requests: 2,
+        num_pending: 0,
+        num_success: 2,
+        num_error: 0,
+        num_cancelled: 0,
+      },
+    });
   });
 
   it('does not apply overrides when AUTONOMY_APPLY_OVERRIDES=false', async () => {
@@ -111,61 +175,10 @@ describe('autonomy apply gate', () => {
       alternativesConsidered: [{ option: 'adjust', rejectedBecause: 'Not needed' }],
     };
 
-    mockGetBatch.mockResolvedValue({
-      id: 'batch-1',
-      status: 'completed',
-      input_file_id: 'file-in',
-      output_file_id: 'file-out',
+    mockGetBatchResults.mockResolvedValue({
+      results: makeBatchResults({ cycleId: pendingCycle, decision, critique }),
     });
-    mockGetFileContent.mockResolvedValue(makeBatchOutputJsonl({ cycleId: pendingCycle, decision, critique }));
-
-    mockLoadAutonomyState.mockResolvedValue({
-      updatedAt: new Date(0).toISOString(),
-      latestCycleId: currentCycle,
-      latestCompletedCycleId: undefined,
-      pendingBatch: {
-        cycleId: pendingCycle,
-        batchId: 'batch-1',
-        inputFileId: 'file-in',
-        model: 'grok-4-1-fast-reasoning',
-        submittedAt: new Date().toISOString(),
-        matrix: {
-          cycleId: pendingCycle,
-          generatedAt: new Date().toISOString(),
-          wrGatePolicy: { primaryPct: 70, fallbackPct: 50, minTrades: 1000, method: 'wilson95_lower', scope: 'memecoin_bags' },
-          strategyRows: [],
-          metrics: {
-            liquidityRegime: { sampleSize: 0, avgLiquidityUsd: 0, medianLiquidityUsd: 0, avgMomentum1h: 0, avgVolLiqRatio: 0 },
-            thompsonBeliefs: { availability: 'unavailable_server_scope', reason: 'n/a', rows: [] },
-            reliability: { confirmed: 0, unresolved: 0, failed: 0 },
-            realized: { totalPnlSol: 0, winCount: 0, lossCount: 0, tradeCount: 0, drawdownPct: 0 },
-          },
-          tokenBudget: { maxInputTokens: 1, maxOutputTokens: 1, estimatedInputTokens: 1 },
-        },
-        matrixHash: 'mhash',
-      },
-      cycles: {
-        [currentCycle]: {
-          cycleId: currentCycle,
-          status: 'noop',
-          reasonCode: 'AUTONOMY_NOOP_DISABLED',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          matrixHash: 'x',
-        },
-        [pendingCycle]: {
-          cycleId: pendingCycle,
-          status: 'pending',
-          reasonCode: 'AUTONOMY_PENDING_BATCH',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          batchId: 'batch-1',
-          inputFileId: 'file-in',
-          matrixHash: 'mhash',
-        },
-      },
-      budgetUsageByDay: {},
-    });
+    mockLoadAutonomyState.mockResolvedValue(makePendingState(currentCycle, pendingCycle));
 
     const mod = await import('@/lib/autonomy/hourly-cycle');
     await mod.runHourlyAutonomyCycle();
@@ -209,61 +222,10 @@ describe('autonomy apply gate', () => {
       alternativesConsidered: [{ option: 'adjust', rejectedBecause: 'Not needed' }],
     };
 
-    mockGetBatch.mockResolvedValue({
-      id: 'batch-1',
-      status: 'completed',
-      input_file_id: 'file-in',
-      output_file_id: 'file-out',
+    mockGetBatchResults.mockResolvedValue({
+      results: makeBatchResults({ cycleId: pendingCycle, decision, critique }),
     });
-    mockGetFileContent.mockResolvedValue(makeBatchOutputJsonl({ cycleId: pendingCycle, decision, critique }));
-
-    mockLoadAutonomyState.mockResolvedValue({
-      updatedAt: new Date(0).toISOString(),
-      latestCycleId: currentCycle,
-      latestCompletedCycleId: undefined,
-      pendingBatch: {
-        cycleId: pendingCycle,
-        batchId: 'batch-1',
-        inputFileId: 'file-in',
-        model: 'grok-4-1-fast-reasoning',
-        submittedAt: new Date().toISOString(),
-        matrix: {
-          cycleId: pendingCycle,
-          generatedAt: new Date().toISOString(),
-          wrGatePolicy: { primaryPct: 70, fallbackPct: 50, minTrades: 1000, method: 'wilson95_lower', scope: 'memecoin_bags' },
-          strategyRows: [],
-          metrics: {
-            liquidityRegime: { sampleSize: 0, avgLiquidityUsd: 0, medianLiquidityUsd: 0, avgMomentum1h: 0, avgVolLiqRatio: 0 },
-            thompsonBeliefs: { availability: 'unavailable_server_scope', reason: 'n/a', rows: [] },
-            reliability: { confirmed: 0, unresolved: 0, failed: 0 },
-            realized: { totalPnlSol: 0, winCount: 0, lossCount: 0, tradeCount: 0, drawdownPct: 0 },
-          },
-          tokenBudget: { maxInputTokens: 1, maxOutputTokens: 1, estimatedInputTokens: 1 },
-        },
-        matrixHash: 'mhash',
-      },
-      cycles: {
-        [currentCycle]: {
-          cycleId: currentCycle,
-          status: 'noop',
-          reasonCode: 'AUTONOMY_NOOP_DISABLED',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          matrixHash: 'x',
-        },
-        [pendingCycle]: {
-          cycleId: pendingCycle,
-          status: 'pending',
-          reasonCode: 'AUTONOMY_PENDING_BATCH',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          batchId: 'batch-1',
-          inputFileId: 'file-in',
-          matrixHash: 'mhash',
-        },
-      },
-      budgetUsageByDay: {},
-    });
+    mockLoadAutonomyState.mockResolvedValue(makePendingState(currentCycle, pendingCycle));
 
     const mod = await import('@/lib/autonomy/hourly-cycle');
     await mod.runHourlyAutonomyCycle();
@@ -271,4 +233,3 @@ describe('autonomy apply gate', () => {
     expect(mockSaveStrategyOverrideSnapshot).toHaveBeenCalledTimes(1);
   });
 });
-
