@@ -133,6 +133,34 @@ describe('AES-256-GCM session wallet encryption', () => {
     expect(result).toBeInstanceOf(Promise);
   });
 
+  it('deterministic derivation is stable for same wallet + signature', async () => {
+    const mod = await import('@/lib/session-wallet');
+    const mainWallet = 'FakeMainWallet1111111111111111111111111111111';
+    const signature = Uint8Array.from(Array.from({ length: 64 }, (_, i) => i));
+
+    const d1 = await mod.deriveDeterministicSessionWallet(mainWallet, signature);
+    const d2 = await mod.deriveDeterministicSessionWallet(mainWallet, signature);
+
+    expect(d1.publicKey).toBe(d2.publicKey);
+    expect(Array.from(d1.keypair.secretKey)).toEqual(Array.from(d2.keypair.secretKey));
+  });
+
+  it('deterministic derivation changes when main wallet changes', async () => {
+    const mod = await import('@/lib/session-wallet');
+    const signature = Uint8Array.from(Array.from({ length: 64 }, (_, i) => i));
+
+    const a = await mod.deriveDeterministicSessionWallet(
+      'FakeMainWallet1111111111111111111111111111111',
+      signature,
+    );
+    const b = await mod.deriveDeterministicSessionWallet(
+      'AnotherWallet11111111111111111111111111111111',
+      signature,
+    );
+
+    expect(a.publicKey).not.toBe(b.publicKey);
+  });
+
   it('round-trips: decrypt(encrypt(secretKey)) === secretKey', async () => {
     const mod = await import('@/lib/session-wallet');
     const mainWallet = 'FakeMainWallet1111111111111111111111111111111';
