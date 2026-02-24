@@ -7,7 +7,7 @@ import { EarlyBetaModal } from '@/components/EarlyBetaModal';
 import { FundRecoveryBanner } from '@/components/FundRecoveryBanner';
 import { AlvaraBasketPanel } from '@/components/investments/AlvaraBasketPanel';
 import { PerpsSniperPanel } from '@/components/perps/PerpsSniperPanel';
-import { isInvestmentsEnabled, isPerpsEnabled } from '@/lib/investments-perps-flags';
+import { isSurfaceEnabled, resolveSurfaceAvailability } from '@/lib/surface-availability';
 
 type InvestmentsTab = 'basket' | 'perps';
 
@@ -19,8 +19,11 @@ export function InvestmentsPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTab = useMemo(() => tabFromSearch(searchParams.get('tab')), [searchParams]);
-  const investmentsEnabled = isInvestmentsEnabled();
-  const perpsEnabled = isPerpsEnabled();
+  const availability = useMemo(() => resolveSurfaceAvailability(), []);
+  const investmentsSurface = availability.investments;
+  const perpsSurface = availability.perps;
+  const investmentsEnabled = isSurfaceEnabled(investmentsSurface);
+  const perpsEnabled = isSurfaceEnabled(perpsSurface);
 
   const setTab = (next: InvestmentsTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -28,15 +31,9 @@ export function InvestmentsPageClient() {
     router.replace(`/investments?${params.toString()}`);
   };
 
-  const hasVisibleTab = investmentsEnabled || perpsEnabled;
-  const effectiveTab: InvestmentsTab =
-    requestedTab === 'perps' && perpsEnabled
-      ? 'perps'
-      : investmentsEnabled
-        ? 'basket'
-        : perpsEnabled
-          ? 'perps'
-          : 'basket';
+  const effectiveTab: InvestmentsTab = requestedTab;
+  const activeSurface = effectiveTab === 'basket' ? investmentsSurface : perpsSurface;
+  const isActiveSurfaceDisabled = !isSurfaceEnabled(activeSurface);
 
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden">
@@ -71,41 +68,50 @@ export function InvestmentsPageClient() {
 
         <section className="rounded-xl border border-border-primary bg-bg-secondary p-2">
           <div className="flex flex-wrap gap-2">
-            {investmentsEnabled && (
-              <button
-                onClick={() => setTab('basket')}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
-                  effectiveTab === 'basket'
-                    ? 'border-accent-neon/50 bg-accent-neon/12 text-accent-neon'
-                    : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
-                }`}
-              >
-                Alvara Basket
-              </button>
-            )}
-            {perpsEnabled && (
-              <button
-                onClick={() => setTab('perps')}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
-                  effectiveTab === 'perps'
-                    ? 'border-blue-400/50 bg-blue-500/12 text-blue-300'
-                    : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
-                }`}
-              >
-                Perps Sniper
-              </button>
-            )}
+            <button
+              onClick={() => setTab('basket')}
+              className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                effectiveTab === 'basket'
+                  ? 'border-accent-neon/50 bg-accent-neon/12 text-accent-neon'
+                  : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
+              } ${!investmentsEnabled ? 'opacity-80' : ''}`}
+              aria-disabled={!investmentsEnabled}
+              title={investmentsSurface.reason || undefined}
+            >
+              Alvara Basket
+            </button>
+            <button
+              onClick={() => setTab('perps')}
+              className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                effectiveTab === 'perps'
+                  ? 'border-blue-400/50 bg-blue-500/12 text-blue-300'
+                  : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
+              } ${!perpsEnabled ? 'opacity-80' : ''}`}
+              aria-disabled={!perpsEnabled}
+              title={perpsSurface.reason || undefined}
+            >
+              Perps Sniper
+            </button>
           </div>
         </section>
 
-        {!hasVisibleTab && (
+        {isActiveSurfaceDisabled && (
           <section className="rounded-xl border border-accent-warning/30 bg-accent-warning/10 p-4 text-xs text-accent-warning">
-            Investments and perps are disabled in this environment. Enable at least one of
-            `NEXT_PUBLIC_ENABLE_INVESTMENTS` or `NEXT_PUBLIC_ENABLE_PERPS`.
+            {activeSurface.reason || 'This surface is disabled for staged rollout.'}
           </section>
         )}
 
-        {hasVisibleTab && (effectiveTab === 'basket' ? <AlvaraBasketPanel /> : <PerpsSniperPanel />)}
+        {effectiveTab === 'basket' ? (
+          <AlvaraBasketPanel
+            disabled={!investmentsEnabled}
+            disabledReason={investmentsSurface.reason}
+          />
+        ) : (
+          <PerpsSniperPanel
+            disabled={!perpsEnabled}
+            disabledReason={perpsSurface.reason}
+          />
+        )}
       </main>
     </div>
   );

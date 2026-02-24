@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { StatusBar } from '@/components/StatusBar';
 import { GraduationFeed } from '@/components/GraduationFeed';
 import { SniperControls } from '@/components/SniperControls';
@@ -17,6 +17,8 @@ import { MobileTerminalShell } from '@/components/mobile/MobileTerminalShell';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { useAutomatedRiskManagement } from '@/hooks/useAutomatedRiskManagement';
 import { useTabNotifications } from '@/hooks/useTabNotifications';
+import { FeatureDisabledOverlay } from '@/components/ui/FeatureDisabledOverlay';
+import { isSurfaceEnabled, resolveSurfaceAvailability } from '@/lib/surface-availability';
 const TRADFI_PRESETS = ['xstock_intraday', 'xstock_swing', 'prestock_speculative', 'index_intraday', 'index_leveraged'];
 
 const TRADFI_STRATEGIES = [
@@ -71,6 +73,9 @@ export default function TradFiSniperDashboard() {
 
   useAutomatedRiskManagement();
   useTabNotifications();
+  const availability = useMemo(() => resolveSurfaceAvailability(), []);
+  const tradfiSurface = availability.tradfi;
+  const tradfiEnabled = isSurfaceEnabled(tradfiSurface);
 
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden">
@@ -78,69 +83,79 @@ export default function TradFiSniperDashboard() {
       <StatusBar />
       <FundRecoveryBanner />
 
-      <main className="app-shell flex-1 min-h-0 py-2 lg:py-4 overflow-hidden flex flex-col">
+      <main className="app-shell relative flex-1 min-h-0 py-2 lg:py-4 overflow-hidden flex flex-col">
+        <div className={tradfiEnabled ? '' : 'pointer-events-none select-none opacity-70'}>
         {/* Desktop-only: TradFi Strategy Presets Info Card (mobile uses the tabbed terminal) */}
-        <div className="hidden lg:grid mb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
-          {TRADFI_STRATEGIES.map((strategy) => (
-            <div
-              key={strategy.id}
-              className="px-3 py-2.5 rounded-lg border border-border-subtle bg-bg-secondary/60 hover:border-blue-400/30 transition-colors flex flex-col"
-            >
-              <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
-                <span className="text-sm">{strategy.icon}</span>
-                <span className="text-xs font-semibold text-text-primary tracking-wide whitespace-nowrap">
-                  {strategy.name}
-                </span>
+          <div className="hidden lg:grid mb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
+            {TRADFI_STRATEGIES.map((strategy) => (
+              <div
+                key={strategy.id}
+                className="px-3 py-2.5 rounded-lg border border-border-subtle bg-bg-secondary/60 hover:border-blue-400/30 transition-colors flex flex-col"
+              >
+                <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
+                  <span className="text-sm">{strategy.icon}</span>
+                  <span className="text-xs font-semibold text-text-primary tracking-wide whitespace-nowrap">
+                    {strategy.name}
+                  </span>
+                </div>
+                <p className="text-[10px] text-text-secondary leading-snug break-words">
+                  {strategy.description}
+                </p>
               </div>
-              <p className="text-[10px] text-text-secondary leading-snug break-words">
-                {strategy.description}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Mobile: bottom-tab terminal */}
-        <div className="lg:hidden flex-1 min-h-0">
-          <MobileTerminalShell routeKey="tradfi-sniper" />
-        </div>
-
-        {/* Desktop: 3-column layout */}
-        <div className="hidden lg:grid flex-1 min-h-0 grid-cols-[320px_1fr_minmax(0,360px)] 2xl:grid-cols-[390px_1fr_minmax(0,460px)] gap-4">
-          <div className="flex flex-col min-h-0 min-w-0">
-            <ErrorBoundary panelName="Token Scanner">
-              <GraduationFeed />
-            </ErrorBoundary>
+            ))}
           </div>
 
-          <div className="flex flex-col gap-4 min-h-0 min-w-0">
-            <ErrorBoundary panelName="Performance Summary">
-              <PerformanceSummary />
-            </ErrorBoundary>
-            <ErrorBoundary panelName="Backtest Validation">
-              <BacktestPanel />
-            </ErrorBoundary>
-            <ErrorBoundary panelName="Token Chart">
-              <TokenChart />
-            </ErrorBoundary>
-            <div className="flex-1 min-h-0">
-              <ErrorBoundary panelName="Execution Log">
-                <ExecutionLog />
+          {/* Mobile: bottom-tab terminal */}
+          <div className="lg:hidden flex-1 min-h-0">
+            <MobileTerminalShell routeKey="tradfi-sniper" />
+          </div>
+
+          {/* Desktop: 3-column layout */}
+          <div className="hidden lg:grid flex-1 min-h-0 grid-cols-[320px_1fr_minmax(0,360px)] 2xl:grid-cols-[390px_1fr_minmax(0,460px)] gap-4">
+            <div className="flex flex-col min-h-0 min-w-0">
+              <ErrorBoundary panelName="Token Scanner">
+                <GraduationFeed />
+              </ErrorBoundary>
+            </div>
+
+            <div className="flex flex-col gap-4 min-h-0 min-w-0">
+              <ErrorBoundary panelName="Performance Summary">
+                <PerformanceSummary />
+              </ErrorBoundary>
+              <ErrorBoundary panelName="Backtest Validation">
+                <BacktestPanel />
+              </ErrorBoundary>
+              <ErrorBoundary panelName="Token Chart">
+                <TokenChart />
+              </ErrorBoundary>
+              <div className="flex-1 min-h-0">
+                <ErrorBoundary panelName="Execution Log">
+                  <ExecutionLog />
+                </ErrorBoundary>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
+              <ErrorBoundary panelName="Sniper Controls">
+                <SniperControls />
+              </ErrorBoundary>
+              <ErrorBoundary panelName="Watchlist">
+                <WatchlistPanel />
+              </ErrorBoundary>
+              <ErrorBoundary panelName="Positions">
+                <PositionsPanel />
               </ErrorBoundary>
             </div>
           </div>
-
-          <div className="flex flex-col gap-4 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
-            <ErrorBoundary panelName="Sniper Controls">
-              <SniperControls />
-            </ErrorBoundary>
-            <ErrorBoundary panelName="Watchlist">
-              <WatchlistPanel />
-            </ErrorBoundary>
-            <ErrorBoundary panelName="Positions">
-              <PositionsPanel />
-            </ErrorBoundary>
-          </div>
         </div>
+
+        {!tradfiEnabled && (
+          <FeatureDisabledOverlay
+            testId="tradfi-disabled-overlay"
+            title="TradFi Sniper Surface Disabled"
+            reason={tradfiSurface.reason}
+          />
+        )}
       </main>
     </div>
   );

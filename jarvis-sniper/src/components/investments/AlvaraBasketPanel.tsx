@@ -2,13 +2,19 @@
 
 import React, { useMemo, useState } from 'react';
 import { useInvestmentData } from './useInvestmentData';
+import { FeatureDisabledOverlay } from '@/components/ui/FeatureDisabledOverlay';
 
 function fmtUsd(v: number): string {
   if (!Number.isFinite(v)) return '--';
   return `$${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
-export function AlvaraBasketPanel() {
+type AlvaraBasketPanelProps = {
+  disabled?: boolean;
+  disabledReason?: string;
+};
+
+export function AlvaraBasketPanel({ disabled = false, disabledReason }: AlvaraBasketPanelProps) {
   const {
     basket,
     performance,
@@ -35,7 +41,7 @@ export function AlvaraBasketPanel() {
   }, [performance]);
 
   return (
-    <div className="space-y-4">
+    <div className="relative space-y-4">
       {error && (
         <div className="rounded border border-accent-error/40 bg-accent-error/10 px-3 py-2 text-xs text-accent-error">
           {error}
@@ -76,8 +82,10 @@ export function AlvaraBasketPanel() {
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-text-primary">Basket Weights</h3>
             <button
+              type="button"
+              disabled={disabled}
               onClick={() => void refresh()}
-              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-muted"
+              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-muted disabled:opacity-50"
             >
               Refresh
             </button>
@@ -116,6 +124,8 @@ export function AlvaraBasketPanel() {
           <h3 className="mb-3 text-sm font-semibold text-text-primary">Operator Actions</h3>
           <div className="flex flex-wrap gap-2">
             <button
+              type="button"
+              disabled={disabled}
               onClick={async () => {
                 setActionState('Triggering cycle...');
                 try {
@@ -126,11 +136,13 @@ export function AlvaraBasketPanel() {
                   setActionState(`Trigger failed: ${msg}`);
                 }
               }}
-              className="rounded border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-300"
+              className="rounded border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-300 disabled:opacity-50"
             >
               Trigger Cycle
             </button>
             <button
+              type="button"
+              disabled={disabled}
               onClick={async () => {
                 setActionState('Activating kill switch...');
                 try {
@@ -141,11 +153,13 @@ export function AlvaraBasketPanel() {
                   setActionState(`Activation failed: ${msg}`);
                 }
               }}
-              className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+              className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300 disabled:opacity-50"
             >
               Activate Kill Switch
             </button>
             <button
+              type="button"
+              disabled={disabled}
               onClick={async () => {
                 setActionState('Deactivating kill switch...');
                 try {
@@ -156,7 +170,7 @@ export function AlvaraBasketPanel() {
                   setActionState(`Deactivation failed: ${msg}`);
                 }
               }}
-              className="rounded border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs text-green-300"
+              className="rounded border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs text-green-300 disabled:opacity-50"
             >
               Deactivate Kill Switch
             </button>
@@ -187,6 +201,14 @@ export function AlvaraBasketPanel() {
           ))}
         </div>
       </div>
+
+      {disabled && (
+        <FeatureDisabledOverlay
+          testId="investments-disabled-overlay"
+          title="Investments Surface Disabled"
+          reason={disabledReason}
+        />
+      )}
     </div>
   );
 }
