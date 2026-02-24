@@ -1,15 +1,13 @@
 {
-  "workflow_mode": "yolo",
-  "model_profile": "balanced",
-  "planning": {
+    "mode": "yolo",
+    "depth": "comprehensive",
+    "parallelization": true,
     "commit_docs": true,
-    "search_gitignored": false
-  },
-  "gates": {
-    "use_researcher": true,
-    "use_checker": true,
-    "use_verifier": true
-  },
-  "created_at": "2026-01-24T13:45:00Z",
-  "version": "1.0"
+    "model_profile": "quality",
+    "workflow": {
+        "research": true,
+        "plan_check": true,
+        "verifier": true,
+        "auto_advance": true
+    }
 }
