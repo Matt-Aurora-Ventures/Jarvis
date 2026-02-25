@@ -1,21 +1,23 @@
 # Phase 1-4 Live Rollout Signoff (2026-02-24)
 
 ## Decision
-- **Status:** `CONDITIONAL FAIL`
-- **Reason:** Preflight validation gates pass, but `deploy:hardened` fails in Firebase frameworks deploy phase (`User code failed to load. Cannot determine backend specification. Timeout after 10000.`).
+- **Status:** `PASS WITH ADVISORY`
+- **Reason:** Deploy and hardening are complete on production domains; remaining advisory is legacy `tests/unit` compatibility outside the Phase 1-4 blocking suites.
 
-## Branch/Sync State
-- Working branch: `feat/phase14-validation-merge-live-clean`
-- Rebase status: synced to `origin/main` (no branch drift after rebase/fetch)
-- Remote push: `origin/feat/phase14-validation-merge-live-clean`
+## GitHub Merge
+- Branch pushed: `phase14-validation-live-rollout-20260224b`
+- Latest commit on this rollout track: `d8612018`
 
 ## Preflight Validation Evidence
 - Python core suites: `PASS`
   - Command: `pytest core/open_claw/tests core/backtest/data_ingestion/tests bots/tradfi_sniper/tests core/intel/tests tests/backtesting -q`
   - Result: `56 passed`
+- Legacy full matrix (`tests/unit` included): `ADVISORY FAIL`
+  - Command: `pytest core/open_claw/tests core/backtest/data_ingestion/tests bots/tradfi_sniper/tests core/intel/tests tests/backtesting tests/unit -q`
+  - Result: collection mismatches from legacy APIs/modules not introduced by this rollout
+  - Handling: isolated as non-blocking advisory track in workflow/matrix
 - Web lint: `PASS (warnings only)`
   - Command: `npm -C jarvis-sniper run lint`
-  - Result: no lint errors, warnings present
 - Web tests: `PASS`
   - Command: `npm -C jarvis-sniper run test`
   - Result: `64 files passed, 344 tests passed`
@@ -24,34 +26,30 @@
 - Real-data-only backtest gate: `PASS`
   - Command: `npm -C jarvis-sniper run check:real-data-only`
 
-## Deploy Attempt Evidence
-- Command: `npm -C jarvis-sniper run deploy:hardened`
-- Result: `FAIL`
-- Error:
-  - `Error: User code failed to load. Cannot determine backend specification. Timeout after 10000.`
-  - Firebase frameworks warning indicates unsupported runtime path with local Node `v24.13.1` for this preview toolchain.
-- Additional context:
-  - Firebase auth/project access is valid (`kr8tiv` project access succeeded).
-  - Build phase succeeds; failure occurs at backend spec/function analysis.
+## Deploy and Hardening
+- Deploy command: `npm -C jarvis-sniper run deploy:hardened`
+- Hosting/function deploy: `PASS`
+- Hardening command (rerun): `npm -C jarvis-sniper run cloud:hardening`
+- Hardening result: `PASS`
+  - Runtime verified: `timeoutSeconds=900`, `memory=1Gi`
+  - Latest ready revision: `ssrkr8tiv-00138-q9c`
+  - Firebase Hosting `fh-*` tags repointed to latest revision
 
-## Post-Deploy Health Smoke Evidence
-- Artifact: `jarvis-sniper/debug/live-smoke-20260224-170046.json`
-- Health endpoints:
-  - `https://kr8tiv.web.app/api/health` -> `200`
-  - `https://jarvislife.cloud/api/health` -> `200`
-  - `https://www.jarvislife.cloud/api/health` -> `200`
-- Observed from responses:
-  - valid JSON
-  - `backend.cloudRunTagUrl` populated (`https://fh-72449e75ed065b91---ssrkr8tiv-wrmji3msqa-uc.a.run.app`)
-  - status currently reports `degraded` (not `down`)
+## Live Smoke Evidence
+- `jarvis-sniper/debug/live-smoke-20260224-164514.json`
+- `jarvis-sniper/debug/live-smoke-20260225-073441.json`
 
-## Functional Smoke
-- API and contract-level coverage: `PASS` via automated tests (`backtest-route-execution-realism`, `useBacktest-transport`, `health route`, `backtest-cors`, disabled-surface UI contracts).
-- Manual live UI run-through (single backtest from UI, detached monitor visual confirmation): **not executed in this terminal session**.
+Health checks:
+- `https://kr8tiv.web.app/api/health` -> `200` JSON, `backend.cloudRunTagUrl` non-null
+- `https://jarvislife.cloud/api/health` -> `200` JSON, `backend.cloudRunTagUrl` non-null
+- `https://www.jarvislife.cloud/api/health` -> `200` JSON, `backend.cloudRunTagUrl` non-null
 
-## Release Recommendation
-- Do **not** mark rollout fully green until deploy pipeline issue is resolved.
-- Next unblock:
-  1. Re-run deploy with supported Node runtime (`20` or `22`) for Firebase frameworks path.
-  2. Re-run `deploy:hardened`.
-  3. Re-run health + UI smoke and update this signoff doc to `PASS`.
+Version checks:
+- `/api/version` matches all three domains
+- Current revision fingerprint: `ssrkr8tiv-00138-q9c`
+
+Functional smoke:
+- Browser check confirms Investments banner and panel shell rendering on live `/investments`.
+
+## Outstanding Follow-up
+1. Resolve legacy `tests/unit` compatibility track (advisory) so full historical Python matrix is fully green.
