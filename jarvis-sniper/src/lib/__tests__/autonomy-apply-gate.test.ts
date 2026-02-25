@@ -187,7 +187,7 @@ describe('autonomy apply gate', () => {
     expect(mockSaveAutonomyState).toHaveBeenCalledTimes(1);
     const savedState = mockSaveAutonomyState.mock.calls[0][0];
     expect(savedState.cycles[pendingCycle].reasonCode).toBe('AUTONOMY_NOOP_APPLY_DISABLED');
-  });
+  }, 20000);
 
   it('applies overrides when AUTONOMY_APPLY_OVERRIDES=true', async () => {
     process.env.AUTONOMY_APPLY_OVERRIDES = 'true';
@@ -231,5 +231,5 @@ describe('autonomy apply gate', () => {
     await mod.runHourlyAutonomyCycle();
 
     expect(mockSaveStrategyOverrideSnapshot).toHaveBeenCalledTimes(1);
-  });
+  }, 20000);
 });

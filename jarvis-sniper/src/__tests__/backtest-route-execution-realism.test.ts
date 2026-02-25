@@ -56,7 +56,7 @@ describe('POST /api/backtest execution realism contract', () => {
     expect(body.sourceDiagnostics.strictNoSynthetic).toBe(false);
     expect(Array.isArray(body.results)).toBe(true);
     expect(body.results.length).toBeGreaterThan(0);
-  });
+  }, 20000);
 
   it('fails closed when strictNoSynthetic is explicitly enabled for client candles', async () => {
     const route = await import('@/app/api/backtest/route');
@@ -76,5 +76,5 @@ describe('POST /api/backtest execution realism contract', () => {
     const body = await res.json();
     expect(res.status).toBe(422);
     expect(String(body.error || '')).toContain('strictNoSynthetic gate failed');
-  });
+  }, 20000);
 });

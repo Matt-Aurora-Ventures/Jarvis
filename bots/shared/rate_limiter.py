@@ -178,9 +178,8 @@ class RateLimiter:
 
         with self._lock:
             bucket = self._get_bucket(api_name, bot_name)
-            result = bucket.consume()
-            self._save_state()
-            return result
+            # Avoid disk I/O on every request; it distorts burst timing behavior.
+            return bucket.consume()
 
     async def wait(self, api_name: str, bot_name: str) -> None:
         """
@@ -199,6 +198,7 @@ class RateLimiter:
             with self._lock:
                 bucket = self._get_bucket(api_name, bot_name)
                 wait_time = bucket.time_until_token()
+                min_interval = (1.0 / bucket.refill_rate) if bucket.refill_rate > 0 else 0.0
 
             if wait_time <= 0:
                 with self._lock:
@@ -207,8 +207,9 @@ class RateLimiter:
                         self._save_state()
                         return
 
-            # Wait for tokens to refill
-            await asyncio.sleep(max(wait_time, 0.01))
+            # Add a guard to avoid waking slightly early due scheduler jitter.
+            floor_wait = min_interval * 0.9 if min_interval > 0 else 0.0
+            await asyncio.sleep(max(wait_time + 0.01, floor_wait, 0.01))
 
     def get_stats(self) -> Dict[str, Any]:
         """

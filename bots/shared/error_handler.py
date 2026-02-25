@@ -782,8 +782,8 @@ def with_retry(
                             base_delay * (2 ** attempt),
                             max_delay
                         )
-                        # Add jitter
-                        delay = delay * (0.5 + random.random())
+                        # Keep jitter bounded so exponential retries still grow monotonically.
+                        delay = delay * (0.75 + (0.5 * random.random()))
                     else:
                         delay = base_delay
 
@@ -824,7 +824,7 @@ def with_retry(
                             base_delay * (2 ** attempt),
                             max_delay
                         )
-                        delay = delay * (0.5 + random.random())
+                        delay = delay * (0.75 + (0.5 * random.random()))
                     else:
                         delay = base_delay
 

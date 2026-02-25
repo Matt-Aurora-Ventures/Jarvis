@@ -163,7 +163,8 @@ class PreferenceManager:
                          Defaults to /root/clawdbots/user_preferences.json
         """
         self.storage_path = storage_path or DEFAULT_STORAGE_PATH
-        self._lock = threading.Lock()
+        # Reentrant lock allows helper methods that also acquire the lock.
+        self._lock = threading.RLock()
         self._data: Dict[str, Any] = {
             "users": {},
             "changes": [],
@@ -194,7 +195,7 @@ class PreferenceManager:
                         self._data["changes"] = []
                     if "last_modified" not in self._data:
                         self._data["last_modified"] = None
-        except (json.JSONDecodeError, FileNotFoundError) as e:
+        except (json.JSONDecodeError, FileNotFoundError, TypeError) as e:
             logger.warning(f"Failed to load preferences: {e}")
             self._data = {"users": {}, "changes": [], "last_modified": None}
 

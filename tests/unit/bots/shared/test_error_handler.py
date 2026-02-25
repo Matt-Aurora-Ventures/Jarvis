@@ -305,6 +305,31 @@ class TestWithRetry:
             assert delay2 > delay1
 
     @pytest.mark.asyncio
+    async def test_exponential_backoff_monotonic_with_jitter_extremes(self):
+        """Retry delays should still grow under jitter extremes."""
+        call_count = 0
+        recorded_delays = []
+
+        async def capture_sleep(delay: float) -> None:
+            recorded_delays.append(delay)
+
+        with patch("bots.shared.error_handler.random.random", side_effect=[1.0, 0.0, 0.0]):
+            with patch("bots.shared.error_handler.asyncio.sleep", new=AsyncMock(side_effect=capture_sleep)):
+                @with_retry(max_retries=3, backoff=True, base_delay=0.1)
+                async def fail_then_succeed():
+                    nonlocal call_count
+                    call_count += 1
+                    if call_count < 3:
+                        raise ValueError("Fail")
+                    return "success"
+
+                result = await fail_then_succeed()
+
+        assert result == "success"
+        assert len(recorded_delays) >= 2
+        assert recorded_delays[1] > recorded_delays[0]
+
+    @pytest.mark.asyncio
     async def test_retry_only_transient_errors(self):
         """Test retry only for transient errors when configured."""
         call_count = 0
