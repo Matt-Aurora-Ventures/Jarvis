@@ -1,0 +1,45 @@
+name: Jarvis Sniper WR Family Calibration
+
+on:
+  schedule:
+    - cron: "5 9 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: jarvis-sniper-wr-family-calibration
+  cancel-in-progress: false
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: jarvis-sniper/package-lock.json
+
+      - name: Install dependencies
+        working-directory: jarvis-sniper
+        run: npm ci
+
+      - name: Generate WR family calibration suggestions
+        working-directory: jarvis-sniper
+        env:
+          WR_FAMILY_CALIBRATION_SOURCE: backtest-data/results/master_comparison.json
+          WR_FAMILY_CALIBRATION_MIN_FAMILY_TRADES: "500"
+        run: npx tsx scripts/calibrate-wr-family-thresholds.ts
+
+      - name: Upload calibration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-family-calibration
+          path: jarvis-sniper/artifacts/ops/wr-family-calibration/*
+          if-no-files-found: ignore
+          retention-days: 30
