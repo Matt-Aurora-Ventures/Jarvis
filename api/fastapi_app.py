@@ -176,6 +176,10 @@ def create_app() -> FastAPI:
             "name": "websocket",
             "description": "Real-time WebSocket connections",
         },
+        {
+            "name": "project-intel",
+            "description": "Project tracking and memory export operations",
+        },
     ]
 
     app = FastAPI(
@@ -603,6 +607,14 @@ def _include_routers(app: FastAPI):
         logger.info("Included credits routes")
     except ImportError as e:
         logger.warning(f"Credits routes not available: {e}")
+
+    # Project intelligence routes
+    try:
+        from api.routes.project_intel import router as project_intel_router
+        app.include_router(project_intel_router)
+        logger.info("Included project intelligence routes")
+    except ImportError as e:
+        logger.warning(f"Project intelligence routes not available: {e}")
 
     # Treasury-Bags integration routes
     try:
