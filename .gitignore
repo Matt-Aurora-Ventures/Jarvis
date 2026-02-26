@@ -528,3 +528,6 @@ C\357\200\272*/
 
 # === PLANNING TEMP ===
 .planning/quick/
+# Local git worktrees
+worktrees/
+.worktrees/
