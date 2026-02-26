@@ -1,0 +1,51 @@
+name: Jarvis Sniper Backtest Dataset Prewarm
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: jarvis-sniper-backtest-prewarm
+  cancel-in-progress: false
+
+jobs:
+  prewarm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: jarvis-sniper/package-lock.json
+
+      - name: Install dependencies
+        working-directory: jarvis-sniper
+        run: npm ci
+
+      - name: Prewarm dataset manifests
+        working-directory: jarvis-sniper
+        env:
+          PREWARM_CANONICAL_ORIGIN: https://jarvislife.cloud
+          PREWARM_FAMILIES: memecoin,bags,bluechip,xstock,prestock,index
+          PREWARM_MODE: quick
+          PREWARM_DATA_SCALE: fast
+          PREWARM_SOURCE_POLICY: allow_birdeye_fallback
+          PREWARM_TIMEOUT_MS: "1500000"
+          PREWARM_POLL_MS: "10000"
+          PREWARM_MIN_HIT_RATE: "0.15"
+        run: npx tsx scripts/prewarm-backtest-datasets.ts
+
+      - name: Upload prewarm summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prewarm-quick-summary
+          path: jarvis-sniper/artifacts/ops/prewarm/*.json
+          if-no-files-found: ignore
+          retention-days: 30
