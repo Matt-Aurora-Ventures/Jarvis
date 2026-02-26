@@ -26,6 +26,7 @@ from core.extracted.kr8tiv_memory.conversation_export import (
     ExportOptions,
 )
 from core.extracted.kr8tiv_memory.project_tracking import (
+    LinkType,
     MilestoneType,
     ProjectStatus,
     ProjectTracker,
@@ -174,6 +175,11 @@ class CreateMilestoneRequest(BaseModel):
     criteria: list[str] = Field(default_factory=list)
     task_ids: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class LinkProjectsRequest(BaseModel):
+    link_type: LinkType = LinkType.RELATED_TO
+    shared_concepts: list[str] = Field(default_factory=list)
 
 
 class ExportOptionsRequest(BaseModel):
@@ -337,6 +343,87 @@ async def get_project_status(
     if not status:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     return status
+
+
+@router.get("/projects/{project_id}/tasks")
+async def list_project_tasks(
+    project_id: str,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
+    project = await tracker.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    tasks = await tracker.list_tasks(project_id=project_id)
+    return {
+        "count": len(tasks),
+        "tasks": [task.to_dict() for task in tasks],
+    }
+
+
+@router.get("/projects/{project_id}/milestones")
+async def list_project_milestones(
+    project_id: str,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
+    project = await tracker.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    milestones = await tracker.list_milestones(project_id=project_id)
+    return {
+        "count": len(milestones),
+        "milestones": [milestone.to_dict() for milestone in milestones],
+    }
+
+
+@router.post("/projects/{source_project_id}/links/{target_project_id}")
+async def link_projects(
+    source_project_id: str,
+    target_project_id: str,
+    request: LinkProjectsRequest = LinkProjectsRequest(),
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
+    link = await tracker.link_projects(
+        source_id=source_project_id,
+        target_id=target_project_id,
+        link_type=request.link_type,
+        shared_concepts=request.shared_concepts,
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="One or both projects were not found")
+    return link.to_dict()
+
+
+@router.get("/projects/{project_id}/similar")
+async def find_similar_projects(
+    project_id: str,
+    limit: int = Query(default=5, ge=1, le=20),
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
+    project = await tracker.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
+
+    similar = await tracker.find_similar_projects(project_id=project_id, limit=limit)
+    return {
+        "count": len(similar),
+        "projects": [
+            {
+                "project": candidate.to_dict(),
+                "similarity": round(score, 4),
+            }
+            for candidate, score in similar
+        ],
+    }
 
 
 @router.get("/stats")

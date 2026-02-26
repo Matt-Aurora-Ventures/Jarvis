@@ -86,6 +86,92 @@ def test_project_task_complete_status_flow(client: TestClient, auth_headers):
     assert payload["progress_percentage"] == 100.0
 
 
+def test_project_lists_tasks_and_milestones(client: TestClient, auth_headers):
+    create_project = client.post(
+        "/api/project-intel/projects",
+        json={"name": "KR8TIV Ops", "description": "ship features"},
+        headers=auth_headers,
+    )
+    assert create_project.status_code == 200
+    project_id = create_project.json()["id"]
+
+    create_task = client.post(
+        f"/api/project-intel/projects/{project_id}/tasks",
+        json={"title": "Wire context", "description": "connect retrieval"},
+        headers=auth_headers,
+    )
+    assert create_task.status_code == 200
+
+    create_milestone = client.post(
+        f"/api/project-intel/projects/{project_id}/milestones",
+        json={"title": "M1", "description": "first integration"},
+        headers=auth_headers,
+    )
+    assert create_milestone.status_code == 200
+
+    task_list = client.get(f"/api/project-intel/projects/{project_id}/tasks", headers=auth_headers)
+    milestone_list = client.get(
+        f"/api/project-intel/projects/{project_id}/milestones",
+        headers=auth_headers,
+    )
+
+    assert task_list.status_code == 200
+    assert task_list.json()["count"] == 1
+    assert task_list.json()["tasks"][0]["title"] == "Wire context"
+
+    assert milestone_list.status_code == 200
+    assert milestone_list.json()["count"] == 1
+    assert milestone_list.json()["milestones"][0]["title"] == "M1"
+
+
+def test_project_links_and_similarity(client: TestClient, auth_headers):
+    create_a = client.post(
+        "/api/project-intel/projects",
+        json={"name": "Alpha", "description": "memory retrieval"},
+        headers=auth_headers,
+    )
+    create_b = client.post(
+        "/api/project-intel/projects",
+        json={"name": "Beta", "description": "memory retrieval tooling"},
+        headers=auth_headers,
+    )
+    assert create_a.status_code == 200
+    assert create_b.status_code == 200
+    source_id = create_a.json()["id"]
+    target_id = create_b.json()["id"]
+
+    tracker = project_intel.get_project_tracker("default")
+    tracker.projects[source_id].embedding = [1.0, 0.0, 0.0]
+    tracker.projects[target_id].embedding = [0.9, 0.1, 0.0]
+
+    link = client.post(
+        f"/api/project-intel/projects/{source_id}/links/{target_id}",
+        json={"link_type": "related_to", "shared_concepts": ["memory", "supermemory"]},
+        headers=auth_headers,
+    )
+    assert link.status_code == 200
+    link_payload = link.json()
+    assert link_payload["source_project_id"] == source_id
+    assert link_payload["target_project_id"] == target_id
+    assert link_payload["link_type"] == "related_to"
+    assert link_payload["shared_concepts"] == ["memory", "supermemory"]
+
+    similar = client.get(
+        f"/api/project-intel/projects/{source_id}/similar?limit=5",
+        headers=auth_headers,
+    )
+    assert similar.status_code == 200
+    payload = similar.json()
+    assert payload["count"] == 1
+    assert payload["projects"][0]["project"]["id"] == target_id
+    assert payload["projects"][0]["similarity"] > 0
+
+
+def test_project_tasks_endpoint_returns_404_for_unknown_project(client: TestClient, auth_headers):
+    response = client.get("/api/project-intel/projects/missing/tasks", headers=auth_headers)
+    assert response.status_code == 404
+
+
 def test_export_markdown_content(client: TestClient, auth_headers):
     response = client.post(
         "/api/project-intel/exports",
