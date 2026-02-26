@@ -18,6 +18,7 @@ import { fetchGeckoSolanaPoolUniverse } from '@/lib/gecko-universe';
 import { fetchMintHistory, type OHLCVSource, type HistoricalDataSet } from '@/lib/historical-data';
 import { XSTOCKS, PRESTOCKS, INDEXES, COMMODITIES_TOKENS, type TokenizedEquity } from '@/lib/xstocks-data';
 import { apiRateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { computeCoverageHealth, resolveCoverageThreshold } from '@/lib/backtest-coverage-policy';
 import {
   putBacktestEvidence,
   type BacktestEvidenceBundle,
@@ -565,6 +566,7 @@ async function runBluechipStrategy(
     maxCandles: number;
     minCandles: number;
     fetchBatchSize?: number;
+    minDatasetsRequired?: number;
   },
   onEvidence?: EvidenceSink,
   onDatasetBatch?: (args: { attempted: number; succeeded: number; failed: number; context: string }) => void,
@@ -592,8 +594,8 @@ async function runBluechipStrategy(
   // GeckoTerminal pulls are paced server-side, but any single token should not be allowed to
   // block the entire backtest run.
   const perTokenTimeoutMs = Math.max(
-    30_000,
-    Math.min(180_000, fetchOpts.maxCandles <= 600 ? 60_000 : 120_000),
+    15_000,
+    Math.min(90_000, fetchOpts.maxCandles <= 600 ? 25_000 : 60_000),
   );
 
   const tokens = tokenSymbol === 'all'
@@ -601,6 +603,7 @@ async function runBluechipStrategy(
     : ALL_BLUECHIPS.filter(t => t.ticker === tokenSymbol);
 
   const runResults: StrategyRunResult[] = [];
+  let datasetsUsed = 0;
 
   // Process hardcoded blue chips in batches of 3 to avoid rate limits
   for (let batch = 0; batch < tokens.length; batch += 3) {
@@ -634,6 +637,7 @@ async function runBluechipStrategy(
       if (settled.status !== 'fulfilled') continue;
       succeeded += 1;
       const data = settled.value;
+      datasetsUsed += 1;
       const results = runStrategy(
         sid, config, data.candles, batchTokens[i].ticker, mode, entrySignal,
       );
@@ -697,6 +701,7 @@ async function runBluechipStrategy(
       );
 
       for (const ds of datasets) {
+        datasetsUsed += 1;
         const results = runStrategy(sid, config, ds.candles, ds.tokenSymbol, mode, entrySignal);
         for (const result of results) {
           onEvidence?.({ dataset: ds, result, mode });
@@ -708,6 +713,13 @@ async function runBluechipStrategy(
         }
       }
     }
+  }
+
+  const minDatasetsRequired = Math.max(1, Math.floor(fetchOpts.minDatasetsRequired || 1));
+  if (datasetsUsed < minDatasetsRequired) {
+    throw new Error(
+      `Bluechip coverage gate failed: only ${datasetsUsed} datasets available (min ${minDatasetsRequired})`,
+    );
   }
 
   return runResults;
@@ -1156,13 +1168,14 @@ async function fetchDatasetsForPools(
   };
 
   const maxCandles = Math.max(0, Number((options as any)?.maxCandles ?? 0) || 0);
-  const perTokenTimeoutMs = Math.max(30_000, Math.min(180_000, maxCandles <= 600 ? 60_000 : 120_000));
+  const perTokenTimeoutMs = Math.max(15_000, Math.min(90_000, maxCandles <= 600 ? 25_000 : 60_000));
+  const attemptCeiling = Math.max(batchSize * 4, maxDatasets * 6);
 
   const datasets: HistoricalDataSet[] = [];
   const sources = new Set<OHLCVSource>();
   let attempted = 0;
 
-  for (let i = 0; i < pools.length && datasets.length < maxDatasets; i += batchSize) {
+  for (let i = 0; i < pools.length && datasets.length < maxDatasets && attempted < attemptCeiling; i += batchSize) {
     const batch = pools.slice(i, i + batchSize);
     attempted += batch.length;
 
@@ -1233,13 +1246,14 @@ async function fetchDatasetsForMints(
   };
 
   const maxCandles = Math.max(0, Number((options as any)?.maxCandles ?? 0) || 0);
-  const perTokenTimeoutMs = Math.max(30_000, Math.min(180_000, maxCandles <= 600 ? 60_000 : 120_000));
+  const perTokenTimeoutMs = Math.max(15_000, Math.min(90_000, maxCandles <= 600 ? 25_000 : 60_000));
+  const attemptCeiling = Math.max(batchSize * 4, maxDatasets * 6);
 
   const datasets: HistoricalDataSet[] = [];
   const sources = new Set<OHLCVSource>();
   let attempted = 0;
 
-  for (let i = 0; i < mints.length && datasets.length < maxDatasets; i += batchSize) {
+  for (let i = 0; i < mints.length && datasets.length < maxDatasets && attempted < attemptCeiling; i += batchSize) {
     const batch = mints.slice(i, i + batchSize);
     attempted += batch.length;
 
@@ -1533,10 +1547,10 @@ export async function POST(request: Request) {
     const requestedMax = typeof body.maxTokens === 'number' ? Math.max(10, Math.min(500, body.maxTokens)) : null;
     const scaleCfg = dataScale === 'fast'
       ? {
-          bluechipMaxTokens: requestedMax ? Math.min(requestedMax, 50) : Math.min(5, ALL_BLUECHIPS.length),
-          memecoinMaxTokens: requestedMax ? Math.min(requestedMax, 50) : 10,
-          bagsMaxTokens: requestedMax ? Math.min(requestedMax, 50) : 10,
-          xstockMaxTokens: requestedMax ? Math.min(requestedMax, 30) : 5,
+          bluechipMaxTokens: requestedMax ? Math.min(requestedMax, 10) : Math.min(5, ALL_BLUECHIPS.length),
+          memecoinMaxTokens: requestedMax ? Math.min(requestedMax, 20) : 10,
+          bagsMaxTokens: requestedMax ? Math.min(requestedMax, 12) : 10,
+          xstockMaxTokens: requestedMax ? Math.min(requestedMax, 10) : 5,
         }
       : {
           bluechipMaxTokens: requestedMax ?? 200,
@@ -1544,6 +1558,16 @@ export async function POST(request: Request) {
           bagsMaxTokens: requestedMax ?? 200,
           xstockMaxTokens: requestedMax ? Math.min(requestedMax, 80) : 50,
         };
+    const bagsCoverageThreshold = resolveCoverageThreshold({
+      family: 'bags',
+      dataScale,
+      requestedMaxTokens: scaleCfg.bagsMaxTokens,
+    });
+    const bluechipCoverageThreshold = resolveCoverageThreshold({
+      family: 'bluechip',
+      dataScale,
+      requestedMaxTokens: scaleCfg.bluechipMaxTokens,
+    });
 
     const allRunResults: StrategyRunResult[] = [];
     let universeTimeouts = 0;
@@ -1662,7 +1686,9 @@ export async function POST(request: Request) {
       const maxCandles = requestedMaxCandles ?? (dataScale === 'fast' ? Math.min(600, historyCandles) : historyCandles);
 
       // Prefer GeckoTerminal-driven universe so pair addresses are guaranteed to exist on Gecko.
-      const geckoCandidateLimit = Math.min(400, Math.max(scaleCfg.memecoinMaxTokens * 3, 80));
+      const geckoCandidateLimit = dataScale === 'fast'
+        ? Math.min(160, Math.max(scaleCfg.memecoinMaxTokens * 2, 40))
+        : Math.min(600, Math.max(scaleCfg.memecoinMaxTokens * 3, 180));
       const nowMs = Date.now();
       const minAgeMs = minCandles * 60 * 60 * 1000;
       let geckoPools: Awaited<ReturnType<typeof fetchGeckoSolanaPoolUniverse>> = [];
@@ -1732,7 +1758,9 @@ export async function POST(request: Request) {
       // Fallback: if GeckoTerminal pool discovery is down, try DexScreener-derived mints.
       if (datasets.length === 0) {
         fallbacksTriggered += 1;
-        const candidateLimit = Math.min(2000, Math.max(scaleCfg.memecoinMaxTokens * 30, 300));
+        const candidateLimit = dataScale === 'fast'
+          ? Math.min(240, Math.max(scaleCfg.memecoinMaxTokens * 12, 80))
+          : Math.min(2000, Math.max(scaleCfg.memecoinMaxTokens * 30, 300));
         heartbeatBacktestRun(runId, `Memecoin fallback discovery via DexScreener (WSOL pairs, target=${candidateLimit})`);
 
         // Prefer pool candidates so we can skip per-mint DexScreener pair discovery.
@@ -1818,27 +1846,44 @@ export async function POST(request: Request) {
       const fromManifest = loadFamilyDatasetManifest(activeDatasetManifestId, 'bags');
       if (fromManifest && fromManifest.datasets.length > 0) {
         const manifestSources = new Set<OHLCVSource>(fromManifest.datasets.map((d) => d.source));
-        bagsUniverse = {
-          mints: fromManifest.datasets.map((d) => d.mintAddress),
-          datasets: fromManifest.datasets.slice(0, scaleCfg.bagsMaxTokens),
-          sources: manifestSources,
-          attempted: fromManifest.manifest.attempted,
-        };
-        markBacktestDatasetBatch(runId, {
-          attemptedDelta: 0,
-          succeededDelta: 0,
-          failedDelta: 0,
-          activity: `Loaded bags dataset manifest (${bagsUniverse.datasets.length} datasets)`,
-        });
-        return bagsUniverse;
+        const manifestDatasets = fromManifest.datasets.slice(0, scaleCfg.bagsMaxTokens);
+        const manifestAttempted = Math.max(
+          manifestDatasets.length,
+          Math.floor(Number(fromManifest.manifest.attempted || 0)),
+        );
+        const manifestHealth = computeCoverageHealth(
+          { attempted: manifestAttempted, succeeded: manifestDatasets.length },
+          bagsCoverageThreshold,
+        );
+        if (manifestHealth.healthy) {
+          bagsUniverse = {
+            mints: fromManifest.datasets.map((d) => d.mintAddress),
+            datasets: manifestDatasets,
+            sources: manifestSources,
+            attempted: fromManifest.manifest.attempted,
+          };
+          markBacktestDatasetBatch(runId, {
+            attemptedDelta: 0,
+            succeededDelta: 0,
+            failedDelta: 0,
+            activity: `Loaded bags dataset manifest (${bagsUniverse.datasets.length} datasets)`,
+          });
+          return bagsUniverse;
+        }
+        heartbeatBacktestRun(
+          runId,
+          `Bags manifest coverage low (${manifestDatasets.length} datasets, hit-rate ${(manifestHealth.hitRate * 100).toFixed(1)}%); rebuilding`,
+        );
       }
 
       const minCandles = dataScale === 'fast' ? 12 : 48;
       const maxCandles = requestedMaxCandles ?? (dataScale === 'fast' ? Math.min(600, historyCandles) : historyCandles);
-      const candidateLimit = Math.min(2000, Math.max(scaleCfg.bagsMaxTokens * 10, 300));
+      const candidateLimit = dataScale === 'fast'
+        ? Math.min(400, Math.max(scaleCfg.bagsMaxTokens * 6, 60))
+        : Math.min(2000, Math.max(scaleCfg.bagsMaxTokens * 10, 300));
       const mints = await fetchBagsMintUniverse(candidateLimit);
 
-      const { datasets, sources, attempted } = await fetchDatasetsForMints(
+      const initial = await fetchDatasetsForMints(
         mints,
         scaleCfg.bagsMaxTokens,
         (mint) => mint.slice(0, 6),
@@ -1849,7 +1894,7 @@ export async function POST(request: Request) {
           maxCandles,
           resolution: '60',
         },
-        fetchBatchSize,
+        dataScale === 'fast' ? Math.max(fetchBatchSize, 8) : fetchBatchSize,
         ({ attempted, succeeded, failed, context }) => {
           markBacktestDatasetBatch(runId, {
             attemptedDelta: attempted,
@@ -1859,6 +1904,65 @@ export async function POST(request: Request) {
           });
         },
       );
+
+      let datasets = initial.datasets;
+      let sources = initial.sources;
+      let attempted = initial.attempted;
+      let health = computeCoverageHealth(
+        { attempted, succeeded: datasets.length },
+        bagsCoverageThreshold,
+      );
+
+      // Recovery pass: force fallback source + relaxed minimum depth when bags coverage is thin.
+      if (!health.healthy) {
+        heartbeatBacktestRun(
+          runId,
+          `Bags coverage below gate (${datasets.length}/${bagsCoverageThreshold.minDatasets}); retrying with fallback source`,
+        );
+        fallbacksTriggered += 1;
+        const relaxedMinCandles = dataScale === 'fast' ? 8 : 24;
+        const recovery = await fetchDatasetsForMints(
+          mints,
+          scaleCfg.bagsMaxTokens,
+          (mint) => mint.slice(0, 6),
+          {
+            allowBirdeyeFallback: true,
+            attemptBirdeyeIfCandlesBelow: relaxedMinCandles,
+            minCandles: relaxedMinCandles,
+            maxCandles,
+            resolution: '60',
+          },
+          dataScale === 'fast' ? Math.max(fetchBatchSize, 8) : fetchBatchSize,
+          ({ attempted, succeeded, failed, context }) => {
+            markBacktestDatasetBatch(runId, {
+              attemptedDelta: attempted,
+              succeededDelta: succeeded,
+              failedDelta: failed,
+              activity: `Bags recovery ${context}`,
+            });
+          },
+        );
+        attempted += recovery.attempted;
+        const byMint = new Map<string, HistoricalDataSet>();
+        for (const ds of [...datasets, ...recovery.datasets]) {
+          if (!byMint.has(ds.mintAddress)) {
+            byMint.set(ds.mintAddress, ds);
+          }
+          if (byMint.size >= scaleCfg.bagsMaxTokens) break;
+        }
+        datasets = [...byMint.values()];
+        sources = new Set<OHLCVSource>([...sources, ...recovery.sources]);
+        health = computeCoverageHealth(
+          { attempted, succeeded: datasets.length },
+          bagsCoverageThreshold,
+        );
+      }
+
+      if (!health.healthy) {
+        throw new Error(
+          `Bags coverage gate failed: datasets=${datasets.length}, attempted=${attempted}, hitRate=${(health.hitRate * 100).toFixed(1)}%, minDatasets=${bagsCoverageThreshold.minDatasets}`,
+        );
+      }
 
       bagsUniverse = { mints, datasets, sources, attempted };
       persistFamilyDatasetManifest({
@@ -2056,6 +2160,7 @@ export async function POST(request: Request) {
                 maxCandles: requestedMaxCandles ?? (dataScale === 'fast' ? Math.min(600, historyCandles) : historyCandles),
                 minCandles: dataScale === 'fast' ? 50 : 120,
                 fetchBatchSize,
+                minDatasetsRequired: bluechipCoverageThreshold.minDatasets,
               },
               onEvidence,
               ({ attempted, succeeded, failed, context }) => {
