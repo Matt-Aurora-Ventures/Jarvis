@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Security, status
 from pydantic import BaseModel, Field
 
+from api.auth.key_auth import api_key_header, api_key_query, validate_key
 from core.extracted.kr8tiv_memory.conversation_export import (
     ConversationExportFormat,
     ConversationExporter,
@@ -32,8 +35,9 @@ logger = logging.getLogger("jarvis.api.project_intel")
 
 router = APIRouter(prefix="/api/project-intel", tags=["project-intel"])
 
-_tracker: Optional[ProjectTracker] = None
-_exporter: Optional[ConversationExporter] = None
+_trackers: dict[str, ProjectTracker] = {}
+_exporters: dict[str, ConversationExporter] = {}
+_service_lock = threading.Lock()
 
 
 def _project_data_dir() -> str:
@@ -44,18 +48,105 @@ def _export_data_dir() -> str:
     return os.getenv("KR8TIV_MEMORY_EXPORT_DIR", "./exports/kr8tiv_memory")
 
 
-def get_project_tracker() -> ProjectTracker:
-    global _tracker
-    if _tracker is None:
-        _tracker = ProjectTracker(data_dir=_project_data_dir())
-    return _tracker
+def _tenant_storage_path(base_dir: str, tenant_id: str) -> str:
+    # Keep tenant data isolated on disk for safer multi-tenant operation.
+    return str(Path(base_dir) / tenant_id)
 
 
-def get_conversation_exporter() -> ConversationExporter:
-    global _exporter
-    if _exporter is None:
-        _exporter = ConversationExporter(output_dir=_export_data_dir(), instance_id="kr8tiv")
-    return _exporter
+def _validate_tenant_id(tenant_id: str) -> str:
+    tenant = tenant_id.strip()
+    if not tenant:
+        raise HTTPException(status_code=400, detail="Invalid tenant id")
+    if len(tenant) > 64:
+        raise HTTPException(status_code=400, detail="Tenant id too long")
+    if not all(ch.isalnum() or ch in ("-", "_") for ch in tenant):
+        raise HTTPException(status_code=400, detail="Tenant id must be alphanumeric, dash, or underscore")
+    return tenant
+
+
+def _require_api_key_enabled() -> bool:
+    return os.getenv("PROJECT_INTEL_REQUIRE_API_KEY", "true").lower() == "true"
+
+
+def _require_tenant_header() -> bool:
+    return os.getenv("PROJECT_INTEL_REQUIRE_TENANT", "false").lower() == "true"
+
+
+async def require_project_intel_access(
+    header_key: Optional[str] = Security(api_key_header),
+    query_key: Optional[str] = Security(api_key_query),
+) -> Optional[str]:
+    if not _require_api_key_enabled():
+        return None
+
+    key = header_key or query_key
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing API key. Provide via X-API-Key header or api_key query param",
+        )
+
+    if validate_key(key) is None:
+        logger.warning("project-intel auth failed: invalid API key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or revoked API key",
+        )
+
+    return key
+
+
+def get_tenant_id(x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-ID")) -> str:
+    if not x_tenant_id:
+        if _require_tenant_header():
+            raise HTTPException(status_code=400, detail="Missing required X-Tenant-ID header")
+        return "default"
+
+    return _validate_tenant_id(x_tenant_id)
+
+
+def get_project_tracker(tenant_id: str) -> ProjectTracker:
+    tracker = _trackers.get(tenant_id)
+    if tracker is not None:
+        return tracker
+
+    with _service_lock:
+        tracker = _trackers.get(tenant_id)
+        if tracker is None:
+            data_dir = _tenant_storage_path(_project_data_dir(), tenant_id)
+            tracker = ProjectTracker(data_dir=data_dir)
+            _trackers[tenant_id] = tracker
+    return tracker
+
+
+def get_conversation_exporter(tenant_id: str) -> ConversationExporter:
+    exporter = _exporters.get(tenant_id)
+    if exporter is not None:
+        return exporter
+
+    with _service_lock:
+        exporter = _exporters.get(tenant_id)
+        if exporter is None:
+            output_dir = _tenant_storage_path(_export_data_dir(), tenant_id)
+            exporter = ConversationExporter(output_dir=output_dir, instance_id=f"kr8tiv-{tenant_id}")
+            _exporters[tenant_id] = exporter
+    return exporter
+
+
+def _resolve_export_output_path(exporter: ConversationExporter, output_path: Optional[str]) -> Optional[str]:
+    if not output_path:
+        return None
+
+    base = exporter.output_dir.resolve()
+    candidate = Path(output_path)
+    if candidate.is_absolute():
+        raise HTTPException(status_code=400, detail="Absolute output_path is not allowed")
+
+    resolved = (base / candidate).resolve()
+    if not resolved.is_relative_to(base):
+        raise HTTPException(status_code=400, detail="Invalid output_path outside export directory")
+
+    return str(resolved)
 
 
 class CreateProjectRequest(BaseModel):
@@ -109,7 +200,7 @@ class ExportRequest(BaseModel):
     entities: list[dict[str, Any]] = Field(default_factory=list)
     relationships: list[dict[str, Any]] = Field(default_factory=list)
     statistics: dict[str, Any] = Field(default_factory=dict)
-    output_path: Optional[str] = None
+    output_path: Optional[str] = Field(default=None, max_length=255)
     return_content: bool = False
 
 
@@ -133,8 +224,12 @@ def _build_export_options(options: ExportOptionsRequest) -> ExportOptions:
 
 
 @router.post("/projects")
-async def create_project(request: CreateProjectRequest):
-    tracker = get_project_tracker()
+async def create_project(
+    request: CreateProjectRequest,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
     project = await tracker.create_project(
         name=request.name,
         description=request.description,
@@ -149,8 +244,10 @@ async def create_project(request: CreateProjectRequest):
 async def list_projects(
     status: Optional[list[ProjectStatus]] = Query(default=None),
     tags: Optional[list[str]] = Query(default=None),
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
 ):
-    tracker = get_project_tracker()
+    tracker = get_project_tracker(tenant_id)
     projects = await tracker.list_projects(status_filter=status, tag_filter=tags)
     return {
         "count": len(projects),
@@ -159,8 +256,12 @@ async def list_projects(
 
 
 @router.get("/projects/{project_id}")
-async def get_project(project_id: str):
-    tracker = get_project_tracker()
+async def get_project(
+    project_id: str,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
     project = await tracker.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
@@ -168,8 +269,13 @@ async def get_project(project_id: str):
 
 
 @router.post("/projects/{project_id}/tasks")
-async def create_task(project_id: str, request: CreateTaskRequest):
-    tracker = get_project_tracker()
+async def create_task(
+    project_id: str,
+    request: CreateTaskRequest,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
     task = await tracker.create_task(
         project_id=project_id,
         title=request.title,
@@ -185,8 +291,12 @@ async def create_task(project_id: str, request: CreateTaskRequest):
 
 
 @router.post("/tasks/{task_id}/complete")
-async def complete_task(task_id: str):
-    tracker = get_project_tracker()
+async def complete_task(
+    task_id: str,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
     task = await tracker.complete_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
@@ -194,8 +304,13 @@ async def complete_task(task_id: str):
 
 
 @router.post("/projects/{project_id}/milestones")
-async def create_milestone(project_id: str, request: CreateMilestoneRequest):
-    tracker = get_project_tracker()
+async def create_milestone(
+    project_id: str,
+    request: CreateMilestoneRequest,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
     milestone = await tracker.create_milestone(
         project_id=project_id,
         title=request.title,
@@ -212,8 +327,12 @@ async def create_milestone(project_id: str, request: CreateMilestoneRequest):
 
 
 @router.get("/projects/{project_id}/status")
-async def get_project_status(project_id: str):
-    tracker = get_project_tracker()
+async def get_project_status(
+    project_id: str,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    tracker = get_project_tracker(tenant_id)
     status = await tracker.get_project_status(project_id)
     if not status:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
@@ -221,13 +340,20 @@ async def get_project_status(project_id: str):
 
 
 @router.get("/stats")
-async def get_stats():
-    return get_project_tracker().get_stats()
+async def get_stats(
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    return get_project_tracker(tenant_id).get_stats()
 
 
 @router.post("/exports")
-async def export_memory(request: ExportRequest):
-    exporter = get_conversation_exporter()
+async def export_memory(
+    request: ExportRequest,
+    _auth: Optional[str] = Depends(require_project_intel_access),
+    tenant_id: str = Depends(get_tenant_id),
+):
+    exporter = get_conversation_exporter(tenant_id)
 
     async def _memories():
         return request.memories
@@ -255,7 +381,8 @@ async def export_memory(request: ExportRequest):
     if request.return_content:
         result = await exporter.export_to_string(options=options)
     else:
-        result = await exporter.export(options=options, output_path=request.output_path)
+        safe_output_path = _resolve_export_output_path(exporter, request.output_path)
+        result = await exporter.export(options=options, output_path=safe_output_path)
 
     payload = result.to_dict()
     if result.content is not None:
