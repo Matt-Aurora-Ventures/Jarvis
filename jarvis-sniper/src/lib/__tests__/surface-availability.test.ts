@@ -19,9 +19,28 @@ describe('surface availability contract', () => {
     expect(map.perps.enabled).toBe(false);
     expect(map.perps.reason).toContain('staged rollout');
 
+    expect(map.clawbot.visible).toBe(true);
+    expect(map.clawbot.enabled).toBe(false);
+    expect(map.clawbot.reason).toContain('staged rollout');
+
     expect(map.tradfi.visible).toBe(true);
     expect(map.tradfi.enabled).toBe(false);
     expect(map.tradfi.reason).toContain('staged rollout');
+  });
+
+  it('keeps clawbot demo-safe in all runtimes', () => {
+    const prod = resolveSurfaceAvailability('clawbot', {
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_ENABLE_CLAWBOT: 'true',
+    });
+    const dev = resolveSurfaceAvailability('clawbot', {
+      NODE_ENV: 'development',
+    });
+
+    expect(prod.enabled).toBe(false);
+    expect(prod.reason).toContain('staged rollout');
+    expect(dev.enabled).toBe(false);
+    expect(dev.reason).toContain('staged rollout');
   });
 
   it('enables tradfi outside production when no explicit flag is set', () => {

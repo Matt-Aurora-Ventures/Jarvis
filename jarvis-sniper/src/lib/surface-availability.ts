@@ -1,6 +1,6 @@
 import { isInvestmentsEnabled, isPerpsEnabled } from '@/lib/investments-perps-flags';
 
-export type SurfaceKey = 'investments' | 'perps' | 'tradfi';
+export type SurfaceKey = 'investments' | 'perps' | 'tradfi' | 'clawbot';
 
 export interface SurfaceAvailability {
   key: SurfaceKey;
@@ -37,6 +37,8 @@ function disabledReasonFor(key: SurfaceKey): string {
       return 'Perps is in staged rollout for this runtime.';
     case 'tradfi':
       return 'TradFi is in staged rollout for this runtime.';
+    case 'clawbot':
+      return 'Clawbot is in staged rollout for this runtime.';
     default:
       return 'This surface is unavailable in this runtime.';
   }
@@ -50,6 +52,8 @@ export function resolveSurfaceAvailability(
   if (key === 'investments') enabled = isInvestmentsEnabled(env);
   if (key === 'perps') enabled = isPerpsEnabled(env);
   if (key === 'tradfi') enabled = isTradfiEnabled(env);
+  // Keep Clawbot demo-safe until backend control-plane hardening is complete.
+  if (key === 'clawbot') enabled = false;
   return {
     key,
     visible: true,
@@ -65,6 +69,7 @@ export function getSurfaceAvailabilityMap(
     investments: resolveSurfaceAvailability('investments', env),
     perps: resolveSurfaceAvailability('perps', env),
     tradfi: resolveSurfaceAvailability('tradfi', env),
+    clawbot: resolveSurfaceAvailability('clawbot', env),
   };
 }
 

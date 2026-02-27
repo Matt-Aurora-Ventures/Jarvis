@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { isInvestmentsEnabled, isPerpsEnabled } from '@/lib/investments-perps-flags';
 
 describe('investments/perps feature flags', () => {
-  it('defaults to enabled outside production when unset', () => {
-    expect(isInvestmentsEnabled({ NODE_ENV: 'development' })).toBe(true);
-    expect(isPerpsEnabled({ NODE_ENV: 'test' })).toBe(true);
-  });
-
-  it('defaults to disabled in production when unset', () => {
+  it('defaults to disabled when unset in all environments', () => {
+    expect(isInvestmentsEnabled({ NODE_ENV: 'development' })).toBe(false);
+    expect(isPerpsEnabled({ NODE_ENV: 'test' })).toBe(false);
     expect(isInvestmentsEnabled({ NODE_ENV: 'production' })).toBe(false);
     expect(isPerpsEnabled({ NODE_ENV: 'production' })).toBe(false);
   });

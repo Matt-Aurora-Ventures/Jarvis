@@ -6,18 +6,12 @@ function parseBoolFlag(raw: string | undefined): boolean | null {
   return null;
 }
 
-function defaultEnabledOutsideProd(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return String(env.NODE_ENV || '').trim().toLowerCase() !== 'production';
-}
-
 export function isInvestmentsEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
   const explicit = parseBoolFlag(env.NEXT_PUBLIC_ENABLE_INVESTMENTS);
   if (explicit !== null) return explicit;
-  return defaultEnabledOutsideProd(env);
+  return false;
 }
 
 export function isPerpsEnabled(
@@ -25,5 +19,5 @@ export function isPerpsEnabled(
 ): boolean {
   const explicit = parseBoolFlag(env.NEXT_PUBLIC_ENABLE_PERPS);
   if (explicit !== null) return explicit;
-  return defaultEnabledOutsideProd(env);
+  return false;
 }

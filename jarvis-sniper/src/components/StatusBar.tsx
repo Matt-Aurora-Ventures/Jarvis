@@ -876,6 +876,11 @@ export function StatusBar() {
         }`}>
           <span className="flex items-center gap-1.5"><Building2 className="w-3 h-3" />TradFi Sniper</span>
         </Link>
+        <Link href="/clawbot" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
+          pathname === '/clawbot' ? 'bg-cyan-500/15 text-cyan-300' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+        }`}>
+          <span className="flex items-center gap-1.5"><Shield className="w-3 h-3" />Clawbot</span>
+        </Link>
         <Link href="/bags-intel" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
           pathname === '/bags-intel' ? 'bg-purple-500/15 text-purple-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
         }`}>
@@ -923,6 +928,11 @@ export function StatusBar() {
             pathname === '/tradfi-sniper' ? 'bg-blue-500/12 text-blue-300 border-blue-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
           }`}>
             <Building2 className="w-3 h-3" />TradFi
+          </Link>
+          <Link href="/clawbot" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
+            pathname === '/clawbot' ? 'bg-cyan-500/12 text-cyan-300 border-cyan-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+          }`}>
+            <Shield className="w-3 h-3" />Clawbot
           </Link>
           <Link href="/bags-intel" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
             pathname === '/bags-intel' ? 'bg-purple-500/12 text-purple-300 border-purple-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
