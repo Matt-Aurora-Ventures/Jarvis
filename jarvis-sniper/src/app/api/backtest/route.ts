@@ -571,18 +571,32 @@ async function runBluechipStrategy(
   onEvidence?: EvidenceSink,
   onDatasetBatch?: (args: { attempted: number; succeeded: number; failed: number; context: string }) => void,
 ): Promise<StrategyRunResult[]> {
-  const withTimeBudget = async <T,>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
-    // Avoid Promise.race() + setTimeout() without cleanup: it can trigger late unhandled rejections
-    // after the main promise already resolved, leaving "zombie" runs with no heartbeat.
+  const withTimeBudget = async <T,>(
+    work: (signal: AbortSignal) => Promise<T>,
+    timeoutMs: number,
+    label: string,
+  ): Promise<T> => {
+    // Abort upstream fetches on timeout so network work does not continue after budget expiry.
     const ms = Math.max(1000, Math.floor(timeoutMs || 0));
     return await new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Timeout (${ms}ms): ${label}`)), ms);
-      promise.then(
-        (val) => {
+      const controller = new AbortController();
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        controller.abort();
+        reject(new Error(`Timeout (${ms}ms): ${label}`));
+      }, ms);
+      work(controller.signal).then(
+        (val: T) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           resolve(val);
         },
-        (err) => {
+        (err: unknown) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           reject(err);
         },
@@ -617,12 +631,13 @@ async function runBluechipStrategy(
     const batchData = await Promise.allSettled(
       batchTokens.map(token =>
         withTimeBudget(
-          fetchMintHistory(token.mintAddress, token.ticker, {
+          (signal) => fetchMintHistory(token.mintAddress, token.ticker, {
             allowBirdeyeFallback: fetchOpts.allowBirdeyeFallback,
             attemptBirdeyeIfCandlesBelow: fetchOpts.minCandles,
             minCandles: fetchOpts.minCandles,
             maxCandles: fetchOpts.maxCandles,
             resolution: '60',
+            signal,
           }),
           perTokenTimeoutMs,
           `fetchMintHistory ${token.ticker}`,
@@ -1150,16 +1165,31 @@ async function fetchDatasetsForPools(
   batchSize = 4,
   onBatch?: (args: { attempted: number; succeeded: number; failed: number; context: string }) => void,
 ): Promise<{ datasets: HistoricalDataSet[]; sources: Set<OHLCVSource>; attempted: number }> {
-  const withTimeBudget = async <T,>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+  const withTimeBudget = async <T,>(
+    work: (signal: AbortSignal) => Promise<T>,
+    timeoutMs: number,
+    label: string,
+  ): Promise<T> => {
     const ms = Math.max(1000, Math.floor(timeoutMs || 0));
     return await new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Timeout (${ms}ms): ${label}`)), ms);
-      promise.then(
-        (val) => {
+      const controller = new AbortController();
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        controller.abort();
+        reject(new Error(`Timeout (${ms}ms): ${label}`));
+      }, ms);
+      work(controller.signal).then(
+        (val: T) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           resolve(val);
         },
-        (err) => {
+        (err: unknown) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           reject(err);
         },
@@ -1188,9 +1218,10 @@ async function fetchDatasetsForPools(
     const settled = await Promise.allSettled(
       batch.map((p) =>
         withTimeBudget(
-          fetchMintHistory(p.baseMint, p.baseSymbol || p.baseMint.slice(0, 6), {
+          (signal) => fetchMintHistory(p.baseMint, p.baseSymbol || p.baseMint.slice(0, 6), {
             ...options,
             pairAddressOverride: p.poolAddress,
+            signal,
           }),
           perTokenTimeoutMs,
           `fetchMintHistory ${p.baseSymbol || p.baseMint.slice(0, 6)}`,
@@ -1228,16 +1259,31 @@ async function fetchDatasetsForMints(
   batchSize = 4,
   onBatch?: (args: { attempted: number; succeeded: number; failed: number; context: string }) => void,
 ): Promise<{ datasets: HistoricalDataSet[]; sources: Set<OHLCVSource>; attempted: number }> {
-  const withTimeBudget = async <T,>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+  const withTimeBudget = async <T,>(
+    work: (signal: AbortSignal) => Promise<T>,
+    timeoutMs: number,
+    label: string,
+  ): Promise<T> => {
     const ms = Math.max(1000, Math.floor(timeoutMs || 0));
     return await new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Timeout (${ms}ms): ${label}`)), ms);
-      promise.then(
-        (val) => {
+      const controller = new AbortController();
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        controller.abort();
+        reject(new Error(`Timeout (${ms}ms): ${label}`));
+      }, ms);
+      work(controller.signal).then(
+        (val: T) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           resolve(val);
         },
-        (err) => {
+        (err: unknown) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           reject(err);
         },
@@ -1266,7 +1312,10 @@ async function fetchDatasetsForMints(
     const settled = await Promise.allSettled(
       batch.map((mint) =>
         withTimeBudget(
-          fetchMintHistory(mint, tokenSymbolForMint(mint), options),
+          (signal) => fetchMintHistory(mint, tokenSymbolForMint(mint), {
+            ...options,
+            signal,
+          }),
           perTokenTimeoutMs,
           `fetchMintHistory ${tokenSymbolForMint(mint)}`,
         ),
@@ -2080,12 +2129,13 @@ export async function POST(request: Request) {
     let strategyIds: string[] = [];
     if (requestedStrategyIds.length > 0) {
       strategyIds = requestedStrategyIds;
+    } else if (typeof strategyId === 'string' && strategyId.trim() && strategyId !== 'all') {
+      // Explicit strategy always wins over family to support targeted warmups/benchmarks.
+      strategyIds = [strategyId.trim()];
     } else if (requestedFamily) {
       strategyIds = resolveStrategyIdsFromFamily(requestedFamily);
     } else {
-      strategyIds = strategyId === 'all'
-        ? orderStrategyIds(Object.keys(STRATEGY_CONFIGS))
-        : [strategyId];
+      strategyIds = orderStrategyIds(Object.keys(STRATEGY_CONFIGS));
     }
 
     const unknownStrategyIds = strategyIds.filter((sid) => !STRATEGY_CONFIGS[sid]);

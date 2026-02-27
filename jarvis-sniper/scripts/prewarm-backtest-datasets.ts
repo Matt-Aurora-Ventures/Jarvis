@@ -209,7 +209,8 @@ async function main(): Promise<void> {
   }
   const healthJson = await healthRes.json();
   const baseUrl = resolvePrewarmBaseUrl(healthJson, canonical);
-  const startUrl = canonical;
+  // Start directly on resolved backend URL (run.app when available) to avoid Hosting edge timeouts.
+  const startUrl = baseUrl;
   console.log(`[prewarm] canonical=${canonical} base=${baseUrl} mode=${options.mode} scale=${dataScale}`);
 
   let failures = 0;

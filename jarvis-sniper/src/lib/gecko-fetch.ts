@@ -18,8 +18,46 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 let geckoChain: Promise<Response> = Promise.resolve(null as unknown as Response);
 let geckoLastAt = 0;
 
-async function doFetch(url: string): Promise<Response> {
+function linkAbortSignal(source: AbortSignal | undefined, target: AbortController): () => void {
+  if (!source) return () => {};
+  if (source.aborted) {
+    target.abort();
+    return () => {};
+  }
+  const onAbort = () => target.abort();
+  source.addEventListener('abort', onAbort, { once: true });
+  return () => source.removeEventListener('abort', onAbort);
+}
+
+async function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    await sleep(ms);
+    return;
+  }
+  if (signal.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+type GeckoFetchOptions = {
+  signal?: AbortSignal;
+};
+
+async function doFetch(url: string, options?: GeckoFetchOptions): Promise<Response> {
   const controller = new AbortController();
+  const detach = linkAbortSignal(options?.signal, controller);
   const timer = setTimeout(() => controller.abort(), GECKO_TIMEOUT_MS);
   try {
     return await fetch(url, {
@@ -28,33 +66,34 @@ async function doFetch(url: string): Promise<Response> {
     });
   } finally {
     clearTimeout(timer);
+    detach();
   }
 }
 
-async function runPaced(url: string): Promise<Response> {
+async function runPaced(url: string, options?: GeckoFetchOptions): Promise<Response> {
   const waitMs = Math.max(0, geckoLastAt + GECKO_MIN_INTERVAL_MS - Date.now());
-  if (waitMs > 0) await sleep(waitMs);
+  if (waitMs > 0) await sleepWithSignal(waitMs, options?.signal);
   geckoLastAt = Date.now();
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await doFetch(url);
+    const res = await doFetch(url, options);
     if (res.status !== 429) return res;
     const ra = res.headers.get('retry-after');
     const retryAfterMs =
       ra && /^\d+$/.test(ra.trim()) ? Number.parseInt(ra.trim(), 10) * 1000 : 0;
-    await sleep(Math.max(1500 + attempt * 1500, retryAfterMs));
+    await sleepWithSignal(Math.max(1500 + attempt * 1500, retryAfterMs), options?.signal);
     geckoLastAt = Date.now();
   }
 
-  return doFetch(url);
+  return doFetch(url, options);
 }
 
-export async function geckoFetchPaced(url: string): Promise<Response> {
+export async function geckoFetchPaced(url: string, options?: GeckoFetchOptions): Promise<Response> {
   // On server: serialize to avoid 429. On client: don't globally serialize.
   if (typeof window === 'undefined') {
-    geckoChain = geckoChain.then(() => runPaced(url), () => runPaced(url));
+    geckoChain = geckoChain.then(() => runPaced(url, options), () => runPaced(url, options));
     return geckoChain;
   }
 
-  return runPaced(url);
+  return runPaced(url, options);
 }

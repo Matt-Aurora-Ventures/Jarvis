@@ -52,6 +52,8 @@ export interface FetchMintHistoryOptions {
   maxCandles?: number;
   /** Birdeye lookback window in days (default: 180). */
   birdeyeLookbackDays?: number;
+  /** Optional abort signal for per-request timeout and run cancellation propagation. */
+  signal?: AbortSignal;
 }
 
 export interface FetchProgress {
@@ -145,22 +147,41 @@ function makeOhlcvCacheKey(args: OhlcvCacheKeyArgs): string {
  */
 const DEXSCREENER_TIMEOUT_MS = 12_000;
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+function linkAbortSignal(source: AbortSignal | undefined, target: AbortController): () => void {
+  if (!source) return () => {};
+  if (source.aborted) {
+    target.abort();
+    return () => {};
+  }
+  const onAbort = () => target.abort();
+  source.addEventListener('abort', onAbort, { once: true });
+  return () => source.removeEventListener('abort', onAbort);
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<Response> {
   const controller = new AbortController();
+  const detach = linkAbortSignal(signal, controller);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
+    detach();
   }
 }
 
-async function fetchBestPair(mintAddress: string): Promise<string | null> {
+async function fetchBestDexPair(mintAddress: string, signal?: AbortSignal): Promise<string | null> {
   try {
     const res = await fetchWithTimeout(
       `${DEXSCREENER_PAIRS}/${mintAddress}`,
       { headers: { Accept: 'application/json' } },
       DEXSCREENER_TIMEOUT_MS,
+      signal,
     );
     if (!res.ok) return null;
 
@@ -180,6 +201,99 @@ async function fetchBestPair(mintAddress: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+const GECKO_TOKEN_POOLS_BASE = 'https://api.geckoterminal.com/api/v2/networks/solana/tokens';
+const STABLE_ROUTING_MINTS = new Set<string>([
+  // WSOL
+  'So11111111111111111111111111111111111111112',
+  // USDC / USDT
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+]);
+
+function parseGeckoTokenMint(id: unknown): string {
+  if (typeof id !== 'string') return '';
+  const trimmed = id.trim();
+  if (!trimmed) return '';
+  if (!trimmed.includes('_')) return trimmed;
+  const [, ...rest] = trimmed.split('_');
+  return rest.join('_');
+}
+
+type GeckoPoolsPayload = {
+  data?: Array<{
+    attributes?: {
+      address?: string | null;
+      reserve_in_usd?: number | string | null;
+    };
+    relationships?: {
+      base_token?: { data?: { id?: string | null } | null } | null;
+      quote_token?: { data?: { id?: string | null } | null } | null;
+    };
+  }>;
+};
+
+export function selectBestGeckoPoolAddress(payload: unknown, targetMint?: string): string | null {
+  const rows = (payload as GeckoPoolsPayload | null | undefined)?.data;
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const normalizedTarget = String(targetMint || '').trim();
+  const candidates = rows
+    .map((row, idx) => {
+      const address = String(row?.attributes?.address || '').trim();
+      if (!address) return null;
+
+      const reserveRaw = row?.attributes?.reserve_in_usd;
+      const reserve = Number.parseFloat(String(reserveRaw ?? '0'));
+      const liquidityUsd = Number.isFinite(reserve) ? reserve : 0;
+
+      const baseMint = parseGeckoTokenMint(row?.relationships?.base_token?.data?.id);
+      const quoteMint = parseGeckoTokenMint(row?.relationships?.quote_token?.data?.id);
+      const stableRoute =
+        normalizedTarget.length > 0 &&
+        ((baseMint === normalizedTarget && STABLE_ROUTING_MINTS.has(quoteMint)) ||
+          (quoteMint === normalizedTarget && STABLE_ROUTING_MINTS.has(baseMint)));
+
+      return { idx, address, liquidityUsd, stableRoute };
+    })
+    .filter((row): row is { idx: number; address: string; liquidityUsd: number; stableRoute: boolean } => !!row);
+
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    if (a.stableRoute !== b.stableRoute) return a.stableRoute ? -1 : 1;
+    if (a.liquidityUsd !== b.liquidityUsd) return b.liquidityUsd - a.liquidityUsd;
+    return a.idx - b.idx;
+  });
+
+  return candidates[0]?.address || null;
+}
+
+async function fetchBestGeckoPair(mintAddress: string, signal?: AbortSignal): Promise<string | null> {
+  const url = `${GECKO_TOKEN_POOLS_BASE}/${mintAddress}/pools?page=1`;
+  try {
+    const res = await geckoFetchPacedShared(url, { signal });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return selectBestGeckoPoolAddress(json, mintAddress);
+  } catch {
+    return null;
+  }
+}
+
+export function buildPairCandidateList(
+  geckoPairAddress: string | null,
+  dexPairAddress: string | null,
+): string[] {
+  const out: string[] = [];
+  for (const raw of [geckoPairAddress, dexPairAddress]) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) continue;
+    if (out.includes(trimmed)) continue;
+    out.push(trimmed);
+  }
+  return out;
 }
 
 // ─── OHLCV (GeckoTerminal) ───
@@ -235,6 +349,13 @@ function geckoParamsForResolution(resolutionMins: string): { timeframe: GeckoTim
   return { timeframe: 'minute', aggregate: Math.max(1, mins) };
 }
 
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
+}
+
 /**
  * Fetch OHLCV candles from GeckoTerminal for a given pool (DexScreener pairAddress).
  *
@@ -244,6 +365,7 @@ async function fetchOHLCVFromGeckoTerminal(
   poolAddress: string,
   resolutionMins: string = '60',
   maxCandles: number = 2000,
+  signal?: AbortSignal,
 ): Promise<OHLCVCandle[]> {
   const { timeframe, aggregate } = geckoParamsForResolution(resolutionMins);
 
@@ -261,7 +383,7 @@ async function fetchOHLCVFromGeckoTerminal(
       (beforeTimestamp ? `&before_timestamp=${beforeTimestamp}` : '');
 
     try {
-      const res = await geckoFetchPacedShared(url);
+      const res = await geckoFetchPacedShared(url, { signal });
       if (!res.ok) break;
 
       const json = await res.json();
@@ -299,7 +421,8 @@ async function fetchOHLCVFromGeckoTerminal(
 
       // If we received fewer than requested, assume end of history.
       if (list.length < limit || beforeTimestamp == null) break;
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) throw error;
       break;
     }
   }
@@ -327,6 +450,7 @@ async function fetchFromBirdeye(
   mintAddress: string,
   timeFrom: number,
   timeTo: number,
+  signal?: AbortSignal,
 ): Promise<OHLCVCandle[]> {
   const apiKey =
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_BIRDEYE_API_KEY) || '';
@@ -341,7 +465,7 @@ async function fetchFromBirdeye(
   };
 
   const attempt = async (): Promise<OHLCVCandle[]> => {
-    const res = await fetchWithTimeout(url, { headers }, 12_000);
+    const res = await fetchWithTimeout(url, { headers }, 12_000, signal);
 
     if (!res.ok) {
       // Surface the status so callers can decide to retry
@@ -369,12 +493,14 @@ async function fetchFromBirdeye(
   try {
     return await attempt();
   } catch (err) {
+    if (isAbortError(err)) throw err;
     // Retry once on 429 (rate limit) or 5xx after a 3s pause
     if (err instanceof BirdeyeHttpError && (err.status === 429 || err.status >= 500)) {
       await new Promise((r) => setTimeout(r, 3000));
       try {
         return await attempt();
-      } catch {
+      } catch (retryErr) {
+        if (isAbortError(retryErr)) throw retryErr;
         return [];
       }
     }
@@ -519,13 +645,20 @@ export async function fetchTokenHistory(
     return cached;
   }
 
-  // Tier 1: GeckoTerminal OHLCV via DexScreener pair discovery
-  const pairAddress = await fetchBestPair(token.mintAddress);
+  // Tier 1: GeckoTerminal OHLCV via preferred Gecko pair with Dex fallback.
+  const geckoPairAddress = await fetchBestGeckoPair(token.mintAddress);
+  const dexPairAddress = await fetchBestDexPair(token.mintAddress);
+  const pairCandidates = buildPairCandidateList(geckoPairAddress, dexPairAddress);
+  let pairAddress = pairCandidates[0] || '';
   let candles: OHLCVCandle[] = [];
   let source: OHLCVSource = 'geckoterminal';
 
-  if (pairAddress) {
-    candles = await fetchOHLCVFromGeckoTerminal(pairAddress, '60', 3000);
+  if (pairCandidates.length > 0) {
+    for (const candidate of pairCandidates) {
+      pairAddress = candidate;
+      candles = await fetchOHLCVFromGeckoTerminal(candidate, '60', 3000);
+      if (candles.length >= MIN_REAL_CANDLES) break;
+    }
   }
 
   // Tier 2: Birdeye OHLCV API (if DexScreener returned insufficient data)
@@ -575,6 +708,7 @@ export async function fetchMintHistory(
   const resolution = options.resolution ?? '60';
   const maxCandles = options.maxCandles ?? 2000;
   const birdeyeLookbackDays = options.birdeyeLookbackDays ?? 180;
+  const signal = options.signal;
 
   const cacheKey = makeOhlcvCacheKey({
     mintAddress,
@@ -590,20 +724,34 @@ export async function fetchMintHistory(
     return cached;
   }
 
-  const pairAddress = pairAddressOverride || (await fetchBestPair(mintAddress));
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+
+  const dexPairAddress = pairAddressOverride ? null : await fetchBestDexPair(mintAddress, signal);
+  const geckoPairAddress = pairAddressOverride ? null : await fetchBestGeckoPair(mintAddress, signal);
+  const pairCandidates = pairAddressOverride
+    ? [pairAddressOverride]
+    : buildPairCandidateList(geckoPairAddress, dexPairAddress);
+
+  let pairAddress = pairCandidates[0] || '';
   let candles: OHLCVCandle[] = [];
   let source: OHLCVSource = 'geckoterminal';
 
-  if (pairAddress) {
-    // Use a smaller cap for batch universes; callers can raise if they need deeper history.
-    candles = await fetchOHLCVFromGeckoTerminal(pairAddress, resolution, maxCandles);
+  if (pairCandidates.length > 0) {
+    // Try preferred pair first, then fallback pair if needed.
+    for (const candidate of pairCandidates) {
+      pairAddress = candidate;
+      candles = await fetchOHLCVFromGeckoTerminal(candidate, resolution, maxCandles, signal);
+      if (candles.length >= minCandles) break;
+    }
   }
 
   // Optional Birdeye fallback (use sparingly; public endpoint is heavily rate limited).
   if (allowBirdeyeFallback && candles.length < Math.max(minCandles, attemptBirdeyeIfCandlesBelow)) {
     const lookbackSec = Math.floor((Date.now() - birdeyeLookbackDays * 24 * 3600 * 1000) / 1000);
     const nowSec = Math.floor(Date.now() / 1000);
-    const birdeyeCandles = await fetchFromBirdeye(mintAddress, lookbackSec, nowSec);
+    const birdeyeCandles = await fetchFromBirdeye(mintAddress, lookbackSec, nowSec, signal);
     if (birdeyeCandles.length >= minCandles) {
       candles = birdeyeCandles;
       source = 'birdeye';
