@@ -10,10 +10,10 @@ import { PerpsSniperPanel } from '@/components/perps/PerpsSniperPanel';
 import { FeatureDisabledOverlay } from '@/components/ui/FeatureDisabledOverlay';
 import { resolveSurfaceAvailability } from '@/lib/surface-availability';
 
-type InvestmentsTab = 'basket' | 'perps';
+type InvestmentsTab = 'investments' | 'perps';
 
 function tabFromSearch(input: string | null): InvestmentsTab {
-  return input === 'perps' ? 'perps' : 'basket';
+  return input === 'perps' ? 'perps' : 'investments';
 }
 
 export function InvestmentsPageClient() {
@@ -37,18 +37,19 @@ export function InvestmentsPageClient() {
       <FundRecoveryBanner />
 
       <main className="app-shell flex-1 py-6 space-y-4">
-        <section className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-4">
-          <h1 className="text-lg font-display font-semibold text-text-primary">Perps</h1>
+        <section className="rounded-xl border border-border-primary bg-bg-secondary p-4">
+          <h1 className="text-lg font-display font-semibold text-text-primary">Investments Workspace</h1>
           <p className="mt-1 text-xs text-text-muted">
             Charts, entries, exits, and take-profit controls for the Jupiter perps sniper workflow.
           </p>
-        </section>
-
-        <section className="rounded-xl border border-border-primary bg-bg-secondary p-4">
-          <h1 className="text-lg font-display font-semibold text-text-primary">Investments</h1>
-          <p className="mt-1 text-xs text-text-muted">
-            Internal beta surface for Alvara basket operations and Jupiter perps execution panels.
-          </p>
+          <div className="mt-3 rounded-lg border border-border-primary bg-bg-tertiary/45 p-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">Quick start</h2>
+            <ol className="mt-2 list-decimal pl-4 text-xs text-text-muted space-y-1">
+              <li>Pick a surface tab: `Investments Core` for basket ops or `Perps Sniper` for futures execution.</li>
+              <li>If trading perps, set daily limits first, then run arm/disarm controls before submitting orders.</li>
+              <li>Use tiny size and monitor audit events before switching anything to live mode.</li>
+            </ol>
+          </div>
           {(!investmentsSurface.enabled || !perpsSurface.enabled) && (
             <a
               href="https://t.me/kr8tivaisystems"
@@ -69,19 +70,31 @@ export function InvestmentsPageClient() {
           )}
         </section>
 
-        <section className="rounded-xl border border-border-primary bg-bg-secondary p-2">
+        <section
+          role="tablist"
+          aria-label="Investments surfaces"
+          className="rounded-xl border border-border-primary bg-bg-secondary p-2"
+        >
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => setTab('basket')}
+              id="investments-tab-investments"
+              role="tab"
+              aria-selected={effectiveTab === 'investments'}
+              aria-controls="investments-tabpanel-investments"
+              onClick={() => setTab('investments')}
               className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
-                effectiveTab === 'basket'
+                effectiveTab === 'investments'
                   ? 'border-accent-neon/50 bg-accent-neon/12 text-accent-neon'
                   : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
               } ${!investmentsSurface.enabled ? 'opacity-80' : ''}`}
             >
-              Alvara Basket {!investmentsSurface.enabled ? '(disabled)' : ''}
+              Investments Core {!investmentsSurface.enabled ? '(disabled)' : ''}
             </button>
             <button
+              id="investments-tab-perps"
+              role="tab"
+              aria-selected={effectiveTab === 'perps'}
+              aria-controls="investments-tabpanel-perps"
               onClick={() => setTab('perps')}
               className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
                 effectiveTab === 'perps'
@@ -94,15 +107,25 @@ export function InvestmentsPageClient() {
           </div>
         </section>
 
-        {effectiveTab === 'basket' ? (
-          <div className="relative">
+        {effectiveTab === 'investments' ? (
+          <div
+            id="investments-tabpanel-investments"
+            role="tabpanel"
+            aria-labelledby="investments-tab-investments"
+            className="relative"
+          >
             <AlvaraBasketPanel forceDisabledReason={!investmentsSurface.enabled ? investmentsSurface.reason : null} />
             {!investmentsSurface.enabled && (
               <FeatureDisabledOverlay reason={investmentsSurface.reason || 'Investments is disabled.'} />
             )}
           </div>
         ) : (
-          <div className="relative">
+          <div
+            id="investments-tabpanel-perps"
+            role="tabpanel"
+            aria-labelledby="investments-tab-perps"
+            className="relative"
+          >
             <PerpsSniperPanel forceDisabledReason={!perpsSurface.enabled ? perpsSurface.reason : null} />
             {!perpsSurface.enabled && <FeatureDisabledOverlay reason={perpsSurface.reason || 'Perps is disabled.'} />}
           </div>

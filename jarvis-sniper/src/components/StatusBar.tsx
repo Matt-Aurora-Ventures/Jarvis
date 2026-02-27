@@ -60,6 +60,18 @@ export function StatusBar() {
   const macro = useMacroData();
   const { theme, toggle: toggleTheme } = useTheme();
   const pathname = usePathname();
+  const isNavRouteActive = (href: string) => {
+    if (href === '/') return pathname === '/';
+    if (href === '/investments') {
+      return (
+        pathname === '/investments' ||
+        pathname.startsWith('/investments/') ||
+        pathname === '/trading' ||
+        pathname.startsWith('/trading/')
+      );
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   const [parseOpen, setParseOpen] = useState(false);
   const [wipeWalletBackups, setWipeWalletBackups] = useState(false);
@@ -862,32 +874,37 @@ export function StatusBar() {
       {/* Desktop navigation — dedicated row */}
       <nav className="hidden lg:flex items-center justify-center gap-2 px-4 py-1.5 border-t border-border-primary/40 bg-bg-tertiary/30">
         <Link href="/" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/' ? 'bg-accent-neon/15 text-accent-neon' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+          isNavRouteActive('/') ? 'bg-accent-neon/15 text-accent-neon' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
         }`}>
           <span className="flex items-center gap-1.5"><Crosshair className="w-3 h-3" />Sniper</span>
         </Link>
+        <Link href="/investments" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
+          isNavRouteActive('/investments') ? 'bg-green-500/15 text-green-300' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+        }`}>
+          <span className="flex items-center gap-1.5"><TrendingUp className="w-3 h-3" />Investments</span>
+        </Link>
         <Link href="/bags-sniper" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/bags-sniper' ? 'bg-purple-500/15 text-purple-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+          isNavRouteActive('/bags-sniper') ? 'bg-purple-500/15 text-purple-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
         }`}>
           <span className="flex items-center gap-1.5"><Package className="w-3 h-3" />Bags Sniper</span>
         </Link>
         <Link href="/tradfi-sniper" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/tradfi-sniper' ? 'bg-blue-500/15 text-blue-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+          isNavRouteActive('/tradfi-sniper') ? 'bg-blue-500/15 text-blue-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
         }`}>
           <span className="flex items-center gap-1.5"><Building2 className="w-3 h-3" />TradFi Sniper</span>
         </Link>
         <Link href="/clawbot" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/clawbot' ? 'bg-cyan-500/15 text-cyan-300' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+          isNavRouteActive('/clawbot') ? 'bg-cyan-500/15 text-cyan-300' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
         }`}>
           <span className="flex items-center gap-1.5"><Shield className="w-3 h-3" />Clawbot</span>
         </Link>
         <Link href="/bags-intel" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/bags-intel' ? 'bg-purple-500/15 text-purple-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+          isNavRouteActive('/bags-intel') ? 'bg-purple-500/15 text-purple-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
         }`}>
           <span className="flex items-center gap-1.5"><Package className="w-3 h-3" />Bags Intel</span>
         </Link>
         <Link href="/bags-graduations" className={`px-3.5 py-1.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${
-          pathname === '/bags-graduations' ? 'bg-amber-500/15 text-amber-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+          isNavRouteActive('/bags-graduations') ? 'bg-amber-500/15 text-amber-400' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
         }`}>
           <span className="flex items-center gap-1.5"><Rocket className="w-3 h-3" />DeGen Launches</span>
         </Link>
@@ -915,32 +932,37 @@ export function StatusBar() {
       <nav className="lg:hidden border-t border-border-primary/50" aria-label="App pages">
         <div className="app-shell py-1.5 flex items-center gap-2 overflow-x-auto">
           <Link href="/" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
-            pathname === '/' ? 'bg-accent-neon/12 text-accent-neon border-accent-neon/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+            isNavRouteActive('/') ? 'bg-accent-neon/12 text-accent-neon border-accent-neon/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
           }`}>
             <Crosshair className="w-3 h-3" />Sniper
           </Link>
+          <Link href="/investments" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
+            isNavRouteActive('/investments') ? 'bg-green-500/12 text-green-300 border-green-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+          }`}>
+            <TrendingUp className="w-3 h-3" />Investments
+          </Link>
           <Link href="/bags-sniper" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
-            pathname === '/bags-sniper' ? 'bg-purple-500/12 text-purple-300 border-purple-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+            isNavRouteActive('/bags-sniper') ? 'bg-purple-500/12 text-purple-300 border-purple-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
           }`}>
             <Package className="w-3 h-3" />Bags Sniper
           </Link>
           <Link href="/tradfi-sniper" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
-            pathname === '/tradfi-sniper' ? 'bg-blue-500/12 text-blue-300 border-blue-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+            isNavRouteActive('/tradfi-sniper') ? 'bg-blue-500/12 text-blue-300 border-blue-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
           }`}>
             <Building2 className="w-3 h-3" />TradFi
           </Link>
           <Link href="/clawbot" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
-            pathname === '/clawbot' ? 'bg-cyan-500/12 text-cyan-300 border-cyan-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+            isNavRouteActive('/clawbot') ? 'bg-cyan-500/12 text-cyan-300 border-cyan-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
           }`}>
             <Shield className="w-3 h-3" />Clawbot
           </Link>
           <Link href="/bags-intel" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
-            pathname === '/bags-intel' ? 'bg-purple-500/12 text-purple-300 border-purple-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+            isNavRouteActive('/bags-intel') ? 'bg-purple-500/12 text-purple-300 border-purple-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
           }`}>
             <Package className="w-3 h-3" />Intel
           </Link>
           <Link href="/bags-graduations" className={`shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors border ${
-            pathname === '/bags-graduations' ? 'bg-amber-500/12 text-amber-300 border-amber-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
+            isNavRouteActive('/bags-graduations') ? 'bg-amber-500/12 text-amber-300 border-amber-500/20' : 'bg-bg-tertiary text-text-muted border-border-primary'
           }`}>
             <Rocket className="w-3 h-3" />Launches
           </Link>

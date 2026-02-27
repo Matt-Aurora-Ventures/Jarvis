@@ -51,8 +51,12 @@ describe('InvestmentsPageClient disabled-surface behavior', () => {
     const html = renderToStaticMarkup(<InvestmentsPageClient />);
 
     expect(html).toContain('Charts, entries, exits, and take-profit controls for the Jupiter perps sniper workflow.');
-    expect(html).toContain('Alvara Basket (disabled)');
+    expect(html).toContain('Quick start');
+    expect(html).toContain('Investments Core (disabled)');
     expect(html).toContain('Perps Sniper (disabled)');
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('role="tab"');
+    expect(html).toContain('role="tabpanel"');
     expect(html).toContain('Panel visible (staged rollout)');
     expect(html).toContain('Investments is in staged rollout for this runtime.');
   });
