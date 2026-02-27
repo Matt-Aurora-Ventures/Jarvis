@@ -9,6 +9,9 @@ on:
 jobs:
   python-test:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: "."
+      JWT_SECRET_KEY: "ci-phase14-placeholder"
     steps:
       - uses: actions/checkout@v4
 
@@ -21,15 +24,36 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest pytest-asyncio pydantic requests
-          # Ensure execution scopes are met logically
+          pip install pytest pytest-asyncio pydantic requests python-telegram-bot
+          # Runtime deps for phase 1-4 strategy and backtesting validations.
           pip install torch pandas optuna web3 solders anchorpy
 
       - name: Run Python Algorithm and Runner Tests
         run: |
-          export PYTHONPATH="."
-          pytest core/open_claw/tests/ \
-                 core/backtest/data_ingestion/tests/ \
-                 bots/tradfi_sniper/tests/ \
-                 core/intel/tests/
+          pytest core/open_claw/tests \
+                 core/backtest/data_ingestion/tests \
+                 bots/tradfi_sniper/tests \
+                 core/intel/tests \
+                 tests/backtesting \
+                 -q
+
+  python-legacy-unit-advisory:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      PYTHONPATH: "."
+      JWT_SECRET_KEY: "ci-phase14-placeholder"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install advisory dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pydantic requests python-telegram-bot
+      - name: Run legacy unit advisory suite
+        run: |
+          pytest tests/unit -q

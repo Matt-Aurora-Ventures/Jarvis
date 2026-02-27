@@ -1,0 +1,214 @@
+{
+    "generatedAt":  "2026-02-25T07:34:43.4551285-06:00",
+    "commit":  "dd2535db",
+    "hardeningStatus":  "completed_via_firebase_refresh_token_gcloud_access_token",
+    "checks":  [
+                   {
+                       "baseUrl":  "https://kr8tiv.web.app",
+                       "health":  {
+                                      "status":  "degraded",
+                                      "timestamp":  "2026-02-25T13:34:43.461Z",
+                                      "uptime":  105.683325381,
+                                      "backend":  {
+                                                      "cloudRunTagUrl":  "https://fh-6a2d9ac6fe43b95b---ssrkr8tiv-wrmji3msqa-uc.a.run.app"
+                                                  },
+                                      "env":  {
+                                                  "rpcGatekeeper":  true,
+                                                  "rpcPublic":  false,
+                                                  "rpcServer":  true,
+                                                  "bagsApiKey":  true,
+                                                  "bagsReferral":  false,
+                                                  "solscanApiKey":  false
+                                              },
+                                      "rpc":  {
+                                                  "configured":  true,
+                                                  "source":  "helius_gatekeeper",
+                                                  "productionMode":  true,
+                                                  "url":  "https://mainnet.helius-rpc.com/?api-key=***",
+                                                  "diagnostic":  "Using helius_gatekeeper: https://mainnet.helius-rpc.com/?api-key=***"
+                                              },
+                                      "upstreams":  {
+                                                        "perps":  {
+                                                                      "configured":  false,
+                                                                      "baseUrl":  null,
+                                                                      "ok":  null,
+                                                                      "statusCode":  null,
+                                                                      "latencyMs":  null,
+                                                                      "error":  null
+                                                                  },
+                                                        "investments":  {
+                                                                            "configured":  false,
+                                                                            "baseUrl":  null,
+                                                                            "ok":  null,
+                                                                            "statusCode":  null,
+                                                                            "latencyMs":  null,
+                                                                            "error":  null
+                                                                        }
+                                                    },
+                                      "autonomy":  {
+                                                       "enabled":  false,
+                                                       "applyOverrides":  false
+                                                   },
+                                      "xai":  {
+                                                  "configured":  true,
+                                                  "batchEnabled":  false,
+                                                  "modelPolicy":  "grok-4-1-fast-reasoning",
+                                                  "dailyBudgetUsd":  10,
+                                                  "keyRatePolicy":  {
+                                                                        "qps":  0.2,
+                                                                        "qpm":  12,
+                                                                        "tpm":  120000
+                                                                    }
+                                              },
+                                      "memory":  {
+                                                     "heapUsedMB":  51,
+                                                     "rssUsedMB":  157
+                                                 }
+                                  },
+                       "version":  {
+                                       "gitSha":  "ssrkr8tiv-00138-q9c",
+                                       "builtAt":  "2026-02-25T13:33:20.660Z",
+                                       "strategySeedRevision":  "v3-backtest-proven-2026-02-15",
+                                       "seedVersion":  "seed-v3"
+                                   }
+                   },
+                   {
+                       "baseUrl":  "https://jarvislife.cloud",
+                       "health":  {
+                                      "status":  "degraded",
+                                      "timestamp":  "2026-02-25T13:34:43.990Z",
+                                      "uptime":  106.212173533,
+                                      "backend":  {
+                                                      "cloudRunTagUrl":  "https://fh-6a2d9ac6fe43b95b---ssrkr8tiv-wrmji3msqa-uc.a.run.app"
+                                                  },
+                                      "env":  {
+                                                  "rpcGatekeeper":  true,
+                                                  "rpcPublic":  false,
+                                                  "rpcServer":  true,
+                                                  "bagsApiKey":  true,
+                                                  "bagsReferral":  false,
+                                                  "solscanApiKey":  false
+                                              },
+                                      "rpc":  {
+                                                  "configured":  true,
+                                                  "source":  "helius_gatekeeper",
+                                                  "productionMode":  true,
+                                                  "url":  "https://mainnet.helius-rpc.com/?api-key=***",
+                                                  "diagnostic":  "Using helius_gatekeeper: https://mainnet.helius-rpc.com/?api-key=***"
+                                              },
+                                      "upstreams":  {
+                                                        "perps":  {
+                                                                      "configured":  false,
+                                                                      "baseUrl":  null,
+                                                                      "ok":  null,
+                                                                      "statusCode":  null,
+                                                                      "latencyMs":  null,
+                                                                      "error":  null
+                                                                  },
+                                                        "investments":  {
+                                                                            "configured":  false,
+                                                                            "baseUrl":  null,
+                                                                            "ok":  null,
+                                                                            "statusCode":  null,
+                                                                            "latencyMs":  null,
+                                                                            "error":  null
+                                                                        }
+                                                    },
+                                      "autonomy":  {
+                                                       "enabled":  false,
+                                                       "applyOverrides":  false
+                                                   },
+                                      "xai":  {
+                                                  "configured":  true,
+                                                  "batchEnabled":  false,
+                                                  "modelPolicy":  "grok-4-1-fast-reasoning",
+                                                  "dailyBudgetUsd":  10,
+                                                  "keyRatePolicy":  {
+                                                                        "qps":  0.2,
+                                                                        "qpm":  12,
+                                                                        "tpm":  120000
+                                                                    }
+                                              },
+                                      "memory":  {
+                                                     "heapUsedMB":  51,
+                                                     "rssUsedMB":  157
+                                                 }
+                                  },
+                       "version":  {
+                                       "gitSha":  "ssrkr8tiv-00138-q9c",
+                                       "builtAt":  "2026-02-25T13:33:20.660Z",
+                                       "strategySeedRevision":  "v3-backtest-proven-2026-02-15",
+                                       "seedVersion":  "seed-v3"
+                                   }
+                   },
+                   {
+                       "baseUrl":  "https://www.jarvislife.cloud",
+                       "health":  {
+                                      "status":  "degraded",
+                                      "timestamp":  "2026-02-25T13:34:44.522Z",
+                                      "uptime":  106.744171581,
+                                      "backend":  {
+                                                      "cloudRunTagUrl":  "https://fh-6a2d9ac6fe43b95b---ssrkr8tiv-wrmji3msqa-uc.a.run.app"
+                                                  },
+                                      "env":  {
+                                                  "rpcGatekeeper":  true,
+                                                  "rpcPublic":  false,
+                                                  "rpcServer":  true,
+                                                  "bagsApiKey":  true,
+                                                  "bagsReferral":  false,
+                                                  "solscanApiKey":  false
+                                              },
+                                      "rpc":  {
+                                                  "configured":  true,
+                                                  "source":  "helius_gatekeeper",
+                                                  "productionMode":  true,
+                                                  "url":  "https://mainnet.helius-rpc.com/?api-key=***",
+                                                  "diagnostic":  "Using helius_gatekeeper: https://mainnet.helius-rpc.com/?api-key=***"
+                                              },
+                                      "upstreams":  {
+                                                        "perps":  {
+                                                                      "configured":  false,
+                                                                      "baseUrl":  null,
+                                                                      "ok":  null,
+                                                                      "statusCode":  null,
+                                                                      "latencyMs":  null,
+                                                                      "error":  null
+                                                                  },
+                                                        "investments":  {
+                                                                            "configured":  false,
+                                                                            "baseUrl":  null,
+                                                                            "ok":  null,
+                                                                            "statusCode":  null,
+                                                                            "latencyMs":  null,
+                                                                            "error":  null
+                                                                        }
+                                                    },
+                                      "autonomy":  {
+                                                       "enabled":  false,
+                                                       "applyOverrides":  false
+                                                   },
+                                      "xai":  {
+                                                  "configured":  true,
+                                                  "batchEnabled":  false,
+                                                  "modelPolicy":  "grok-4-1-fast-reasoning",
+                                                  "dailyBudgetUsd":  10,
+                                                  "keyRatePolicy":  {
+                                                                        "qps":  0.2,
+                                                                        "qpm":  12,
+                                                                        "tpm":  120000
+                                                                    }
+                                              },
+                                      "memory":  {
+                                                     "heapUsedMB":  52,
+                                                     "rssUsedMB":  157
+                                                 }
+                                  },
+                       "version":  {
+                                       "gitSha":  "ssrkr8tiv-00138-q9c",
+                                       "builtAt":  "2026-02-25T13:33:20.660Z",
+                                       "strategySeedRevision":  "v3-backtest-proven-2026-02-15",
+                                       "seedVersion":  "seed-v3"
+                                   }
+                   }
+               ]
+}

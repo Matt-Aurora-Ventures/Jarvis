@@ -85,6 +85,7 @@ class Config:
             "temperature": 0.7,
             "max_tokens": 500,
             "fallback_provider": "ollama",
+            "consensus_for_complex": False,
         },
         "trading": {
             "enabled": False,

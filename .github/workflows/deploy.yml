@@ -91,8 +91,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
     environment: production
-    # Requires successful completion of our python backtesting and unit testing gates
-    needs: [deploy-staging]
+    # Intentionally independent from deploy-staging because staging is conditional.
+    # Production safety is enforced by CI status checks on main.
 
     steps:
       - uses: actions/checkout@v4

@@ -15,6 +15,7 @@
     "smoke:nav": "python scripts/with_dev_server.py --npm-script dev:turbo -- python scripts/smoke-nav-playwright.py",
     "backtest:ci": "bash backtest-data/scripts/run_pipeline_ci.sh",
     "backtest:walkforward": "./node_modules/.bin/tsx backtest-data/scripts/08_walkforward_validate.ts",
+    "check:real-data-only": "vitest run src/__tests__/backtest-route-execution-realism.test.ts",
     "risk-worker": "npx tsx scripts/risk-worker.ts",
     "cloud:hardening": "powershell -ExecutionPolicy Bypass -File scripts/post-deploy-cloud-run-hardening.ps1",
     "deploy:hardened": "powershell -ExecutionPolicy Bypass -Command \"$env:GOOGLE_CLOUD_QUOTA_PROJECT='kr8tiv'; npx firebase-tools deploy --only hosting; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\" && npm run cloud:hardening",

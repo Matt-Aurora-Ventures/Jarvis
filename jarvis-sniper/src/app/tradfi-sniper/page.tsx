@@ -14,9 +14,11 @@ import { BacktestPanel } from '@/components/BacktestPanel';
 import { FundRecoveryBanner } from '@/components/FundRecoveryBanner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { MobileTerminalShell } from '@/components/mobile/MobileTerminalShell';
+import { FeatureDisabledOverlay } from '@/components/ui/FeatureDisabledOverlay';
 import { useSniperStore } from '@/stores/useSniperStore';
 import { useAutomatedRiskManagement } from '@/hooks/useAutomatedRiskManagement';
 import { useTabNotifications } from '@/hooks/useTabNotifications';
+import { resolveSurfaceAvailability } from '@/lib/surface-availability';
 const TRADFI_PRESETS = ['xstock_intraday', 'xstock_swing', 'prestock_speculative', 'index_intraday', 'index_leveraged'];
 
 const TRADFI_STRATEGIES = [
@@ -53,6 +55,8 @@ const TRADFI_STRATEGIES = [
 ] as const;
 
 export default function TradFiSniperDashboard() {
+  const tradfiSurface = resolveSurfaceAvailability('tradfi');
+
   // Keep this page scoped to TradFi assets/presets (xstocks/prestocks/indexes).
   // Use loadPreset so SL/TP/filter config actually updates (not just the label).
   useEffect(() => {
@@ -78,7 +82,7 @@ export default function TradFiSniperDashboard() {
       <StatusBar />
       <FundRecoveryBanner />
 
-      <main className="app-shell flex-1 min-h-0 py-2 lg:py-4 overflow-hidden flex flex-col">
+      <main className="app-shell relative flex-1 min-h-0 py-2 lg:py-4 overflow-hidden flex flex-col">
         {/* Desktop-only: TradFi Strategy Presets Info Card (mobile uses the tabbed terminal) */}
         <div className="hidden lg:grid mb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
           {TRADFI_STRATEGIES.map((strategy) => (
@@ -141,6 +145,10 @@ export default function TradFiSniperDashboard() {
             </ErrorBoundary>
           </div>
         </div>
+
+        {!tradfiSurface.enabled && (
+          <FeatureDisabledOverlay reason={tradfiSurface.reason || 'TradFi is disabled in this runtime.'} />
+        )}
       </main>
     </div>
   );
