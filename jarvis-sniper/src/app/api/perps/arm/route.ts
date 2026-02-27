@@ -1,5 +1,5 @@
 import { proxyPerpsPost } from '@/lib/perps/proxy';
-import { fallbackOpenPosition } from '@/lib/perps/fallback-runtime';
+import { fallbackArm } from '@/lib/perps/fallback-runtime';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -9,10 +9,10 @@ export async function POST(request: Request) {
   const normalizedPayload =
     payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
 
-  const upstream = await proxyPerpsPost('/open', request);
+  const upstream = await proxyPerpsPost('/arm', request);
   if (upstream.status < 500) return upstream;
 
-  const fallback = fallbackOpenPosition(normalizedPayload);
+  const fallback = fallbackArm(normalizedPayload);
   const status = fallback.ok ? 200 : Number(fallback.status || 400);
   return NextResponse.json(fallback, { status });
 }

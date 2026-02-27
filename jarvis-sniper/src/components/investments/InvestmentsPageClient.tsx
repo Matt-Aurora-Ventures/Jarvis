@@ -37,28 +37,36 @@ export function InvestmentsPageClient() {
       <FundRecoveryBanner />
 
       <main className="app-shell flex-1 py-6 space-y-4">
+        <section className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-4">
+          <h1 className="text-lg font-display font-semibold text-text-primary">Perps</h1>
+          <p className="mt-1 text-xs text-text-muted">
+            Charts, entries, exits, and take-profit controls for the Jupiter perps sniper workflow.
+          </p>
+        </section>
+
         <section className="rounded-xl border border-border-primary bg-bg-secondary p-4">
           <h1 className="text-lg font-display font-semibold text-text-primary">Investments</h1>
           <p className="mt-1 text-xs text-text-muted">
             Internal beta surface for Alvara basket operations and Jupiter perps execution panels.
           </p>
-          <a
-            href="https://t.me/kr8tivaisystems"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 block rounded-lg border border-accent-warning/35 bg-accent-warning/10 p-3 transition-colors hover:bg-accent-warning/15"
-          >
-            <div className="text-xs font-semibold uppercase tracking-wide text-accent-warning">
-              Investments Coming Soon
-            </div>
-            <p className="mt-1 text-xs text-text-secondary">
-              This section is temporarily in staged rollout while we finish reliability upgrades. Follow Telegram for
-              release updates.
-            </p>
-            <span className="mt-2 inline-block text-[11px] font-semibold text-accent-warning">
-              Get Updates on Telegram
-            </span>
-          </a>
+          {(!investmentsSurface.enabled || !perpsSurface.enabled) && (
+            <a
+              href="https://t.me/kr8tivaisystems"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 block rounded-lg border border-accent-warning/35 bg-accent-warning/10 p-3 transition-colors hover:bg-accent-warning/15"
+            >
+              <div className="text-xs font-semibold uppercase tracking-wide text-accent-warning">
+                Investments Rollout
+              </div>
+              <p className="mt-1 text-xs text-text-secondary">
+                Some operator controls are in staged rollout for this runtime. Follow Telegram for release updates.
+              </p>
+              <span className="mt-2 inline-block text-[11px] font-semibold text-accent-warning">
+                Get Updates on Telegram
+              </span>
+            </a>
+          )}
         </section>
 
         <section className="rounded-xl border border-border-primary bg-bg-secondary p-2">

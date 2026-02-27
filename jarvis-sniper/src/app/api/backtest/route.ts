@@ -608,8 +608,8 @@ async function runBluechipStrategy(
   // GeckoTerminal pulls are paced server-side, but any single token should not be allowed to
   // block the entire backtest run.
   const perTokenTimeoutMs = Math.max(
-    15_000,
-    Math.min(90_000, fetchOpts.maxCandles <= 600 ? 25_000 : 60_000),
+    60_000,
+    Math.min(300_000, fetchOpts.maxCandles <= 600 ? 120_000 : 240_000),
   );
 
   const tokens = tokenSymbol === 'all'
@@ -1198,7 +1198,7 @@ async function fetchDatasetsForPools(
   };
 
   const maxCandles = Math.max(0, Number((options as any)?.maxCandles ?? 0) || 0);
-  const perTokenTimeoutMs = Math.max(15_000, Math.min(90_000, maxCandles <= 600 ? 25_000 : 60_000));
+  const perTokenTimeoutMs = Math.max(60_000, Math.min(300_000, maxCandles <= 600 ? 120_000 : 240_000));
   const attemptCeiling = Math.max(batchSize * 4, maxDatasets * 6);
 
   const datasets: HistoricalDataSet[] = [];
@@ -1292,7 +1292,7 @@ async function fetchDatasetsForMints(
   };
 
   const maxCandles = Math.max(0, Number((options as any)?.maxCandles ?? 0) || 0);
-  const perTokenTimeoutMs = Math.max(15_000, Math.min(90_000, maxCandles <= 600 ? 25_000 : 60_000));
+  const perTokenTimeoutMs = Math.max(60_000, Math.min(300_000, maxCandles <= 600 ? 120_000 : 240_000));
   const attemptCeiling = Math.max(batchSize * 4, maxDatasets * 6);
 
   const datasets: HistoricalDataSet[] = [];

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { usePerpsData } from './usePerpsData';
 import { PerpsCandlesChart } from './PerpsCandlesChart';
 
@@ -37,6 +37,12 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
     setHistoryResolution,
     openPosition,
     closePosition,
+    startRunner,
+    stopRunner,
+    armPrepare,
+    armConfirm,
+    disarm,
+    updateLimits,
     refreshStatus,
   } = usePerpsData();
 
@@ -47,6 +53,10 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
   const [tpPct, setTpPct] = useState('10');
   const [slPct, setSlPct] = useState('5');
   const [orderState, setOrderState] = useState<string>('');
+  const [operatorState, setOperatorState] = useState<string>('');
+  const [armChallenge, setArmChallenge] = useState<string>('');
+  const [maxTradesPerDay, setMaxTradesPerDay] = useState<number>(40);
+  const [dailyLossLimitUsd, setDailyLossLimitUsd] = useState<number>(500);
 
   const featureDisabled = Boolean(forceDisabledReason);
   const canTrade = !featureDisabled && isArmed && isLive;
@@ -56,6 +66,17 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
     if (status.runner_healthy) return 'Runner Online';
     return 'Runner Offline';
   }, [status]);
+
+  useEffect(() => {
+    const incomingMaxTrades = Number(status?.daily?.max_trades_per_day);
+    const incomingDailyLoss = Number(status?.daily?.daily_loss_limit_usd);
+    if (Number.isFinite(incomingMaxTrades) && incomingMaxTrades > 0) {
+      setMaxTradesPerDay(Math.floor(incomingMaxTrades));
+    }
+    if (Number.isFinite(incomingDailyLoss) && incomingDailyLoss > 0) {
+      setDailyLossLimitUsd(incomingDailyLoss);
+    }
+  }, [status?.daily?.max_trades_per_day, status?.daily?.daily_loss_limit_usd]);
 
   return (
     <div className="space-y-4">
@@ -88,6 +109,173 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
           <div>ETH</div>
           <div className="mt-1 text-sm font-semibold text-text-primary">{fmtPrice(prices?.eth || 0)}</div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-border-primary bg-bg-secondary p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <h3 className="text-sm font-semibold text-text-primary">Perps Operator Controls</h3>
+          <div className="text-xs text-text-muted">
+            Arm Stage: <span className="font-semibold text-text-primary">{String(status?.arm?.stage || 'disarmed').toUpperCase()}</span>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-5">
+          <button
+            type="button"
+            disabled={featureDisabled}
+            className="rounded border border-border-primary bg-bg-tertiary px-2 py-2 text-xs text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={async () => {
+              if (featureDisabled) return;
+              setOperatorState('Starting runner...');
+              try {
+                const body = await startRunner();
+                setOperatorState(String(body.message || 'Runner start request sent.'));
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                setOperatorState(`Runner start failed: ${msg}`);
+              }
+            }}
+          >
+            Start Runner
+          </button>
+          <button
+            type="button"
+            disabled={featureDisabled}
+            className="rounded border border-border-primary bg-bg-tertiary px-2 py-2 text-xs text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={async () => {
+              if (featureDisabled) return;
+              setOperatorState('Stopping runner...');
+              try {
+                const body = await stopRunner();
+                setOperatorState(String(body.message || 'Runner stop request sent.'));
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                setOperatorState(`Runner stop failed: ${msg}`);
+              }
+            }}
+          >
+            Stop Runner
+          </button>
+          <button
+            type="button"
+            disabled={featureDisabled}
+            className="rounded border border-accent-neon/40 bg-accent-neon/10 px-2 py-2 text-xs text-accent-neon disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={async () => {
+              if (featureDisabled) return;
+              setOperatorState('Preparing arm challenge...');
+              try {
+                const body = await armPrepare();
+                const nextChallenge = String(body.challenge || '');
+                setArmChallenge(nextChallenge);
+                setOperatorState(nextChallenge ? 'Arm challenge prepared. Confirm arm to activate live mode.' : 'Arm prepare request accepted.');
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                setOperatorState(`Arm prepare failed: ${msg}`);
+              }
+            }}
+          >
+            Prepare Arm
+          </button>
+          <button
+            type="button"
+            disabled={featureDisabled || !armChallenge.trim()}
+            className="rounded border border-blue-400/50 bg-blue-500/10 px-2 py-2 text-xs text-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={async () => {
+              if (featureDisabled) return;
+              const challenge = armChallenge.trim();
+              if (!challenge) {
+                setOperatorState('Prepare arm first to get a valid challenge.');
+                return;
+              }
+              setOperatorState('Confirming arm...');
+              try {
+                const body = await armConfirm(challenge);
+                setArmChallenge('');
+                const reason = body.reason ? ` (${String(body.reason)})` : '';
+                setOperatorState(`Arm confirm accepted${reason}.`);
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                setOperatorState(`Arm confirm failed: ${msg}`);
+              }
+            }}
+          >
+            Confirm Arm
+          </button>
+          <button
+            type="button"
+            disabled={featureDisabled}
+            className="rounded border border-red-500/40 bg-red-500/10 px-2 py-2 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={async () => {
+              if (featureDisabled) return;
+              setOperatorState('Disarming...');
+              try {
+                await disarm();
+                setArmChallenge('');
+                setOperatorState('Disarm completed.');
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                setOperatorState(`Disarm failed: ${msg}`);
+              }
+            }}
+          >
+            Disarm
+          </button>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-[1.4fr_1fr_1fr_auto]">
+          <label className="flex flex-col gap-1 text-xs text-text-muted">
+            Arm Challenge
+            <input
+              value={armChallenge}
+              onChange={(e) => setArmChallenge(e.target.value)}
+              placeholder="prepare to receive challenge"
+              disabled={featureDisabled}
+              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-text-muted">
+            Max Trades / Day
+            <input
+              value={maxTradesPerDay}
+              onChange={(e) => setMaxTradesPerDay(Number(e.target.value || 0))}
+              type="number"
+              min={1}
+              disabled={featureDisabled}
+              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-text-muted">
+            Daily Loss Limit (USD)
+            <input
+              value={dailyLossLimitUsd}
+              onChange={(e) => setDailyLossLimitUsd(Number(e.target.value || 0))}
+              type="number"
+              min={1}
+              disabled={featureDisabled}
+              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={featureDisabled}
+            className="h-fit self-end rounded border border-border-primary bg-bg-tertiary px-3 py-2 text-xs text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={async () => {
+              if (featureDisabled) return;
+              setOperatorState('Updating limits...');
+              try {
+                await updateLimits({ maxTradesPerDay, dailyLossLimitUsd });
+                setOperatorState('Risk limits updated.');
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                setOperatorState(`Limit update failed: ${msg}`);
+              }
+            }}
+          >
+            Apply Limits
+          </button>
+        </div>
+
+        {operatorState && <p className="mt-3 text-xs text-text-muted">{operatorState}</p>}
       </div>
 
       <PerpsCandlesChart

@@ -22,6 +22,12 @@ export interface PerpsStatus {
     armed_by?: string;
     last_reason?: string;
   };
+  daily?: {
+    trades_today?: number;
+    realized_pnl_today?: number;
+    max_trades_per_day?: number;
+    daily_loss_limit_usd?: number;
+  };
 }
 
 export interface PerpsPosition {
@@ -165,6 +171,20 @@ export function usePerpsData() {
     setState((prev) => ({ ...prev, historyResolution: resolution }));
   }, []);
 
+  const postPerpsAction = useCallback(async (path: string, payload: unknown = {}) => {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(String(body.error ?? `HTTP ${r.status}`));
+    }
+    await refreshStatus();
+    return body;
+  }, [refreshStatus]);
+
   const openPosition = useCallback(async (params: {
     market: string;
     side: 'long' | 'short';
@@ -174,30 +194,39 @@ export function usePerpsData() {
     slPct?: number;
   }) => {
     const payload = normalizePerpsOrderRequest(params);
-    const r = await fetch('/api/perps/open', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}));
-      throw new Error(String(body.error ?? `HTTP ${r.status}`));
-    }
-    await refreshStatus();
-  }, [refreshStatus]);
+    await postPerpsAction('/api/perps/open', payload);
+  }, [postPerpsAction]);
 
   const closePosition = useCallback(async (positionPda: string) => {
-    const r = await fetch('/api/perps/close', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ position_pda: positionPda }),
+    await postPerpsAction('/api/perps/close', { position_pda: positionPda });
+  }, [postPerpsAction]);
+
+  const startRunner = useCallback(async () => {
+    return postPerpsAction('/api/perps/runner/start');
+  }, [postPerpsAction]);
+
+  const stopRunner = useCallback(async () => {
+    return postPerpsAction('/api/perps/runner/stop');
+  }, [postPerpsAction]);
+
+  const armPrepare = useCallback(async () => {
+    return postPerpsAction('/api/perps/arm', { step: 'prepare', actor: 'web_ui' });
+  }, [postPerpsAction]);
+
+  const armConfirm = useCallback(async (challenge: string) => {
+    return postPerpsAction('/api/perps/arm', { step: 'confirm', challenge, actor: 'web_ui' });
+  }, [postPerpsAction]);
+
+  const disarm = useCallback(async (reason = 'web_ui_disarm') => {
+    return postPerpsAction('/api/perps/disarm', { reason, actor: 'web_ui' });
+  }, [postPerpsAction]);
+
+  const updateLimits = useCallback(async (params: { maxTradesPerDay?: number; dailyLossLimitUsd?: number }) => {
+    return postPerpsAction('/api/perps/limits', {
+      max_trades_per_day: params.maxTradesPerDay,
+      daily_loss_limit_usd: params.dailyLossLimitUsd,
     });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}));
-      throw new Error(String(body.error ?? `HTTP ${r.status}`));
-    }
-    await refreshStatus();
-  }, [refreshStatus]);
+  }, [postPerpsAction]);
 
   return {
     ...state,
@@ -207,6 +236,12 @@ export function usePerpsData() {
     setHistoryResolution,
     openPosition,
     closePosition,
+    startRunner,
+    stopRunner,
+    armPrepare,
+    armConfirm,
+    disarm,
+    updateLimits,
     refreshStatus,
   };
 }
