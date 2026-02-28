@@ -39,15 +39,13 @@ export function InvestmentsPageClient() {
       <main className="app-shell flex-1 py-6 space-y-4">
         <section className="rounded-xl border border-border-primary bg-bg-secondary p-4">
           <h1 className="text-lg font-display font-semibold text-text-primary">Investments Workspace</h1>
-          <p className="mt-1 text-xs text-text-muted">
-            Two clear paths: run the Alvara basket or trade Jupiter perps with guided controls.
-          </p>
+          <p className="mt-1 text-xs text-text-muted">Two paths only: basket investing or perps execution.</p>
           <div className="mt-3 rounded-lg border border-border-primary bg-bg-tertiary/45 p-3">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">Fast path</h2>
             <ol className="mt-2 list-decimal pl-4 text-xs text-text-muted space-y-1">
-              <li>Choose a tab: `Investments Core` for basket management or `Perps Sniper` for futures.</li>
-              <li>Perps flow: press `Ready Bot`, save limits, then submit entry with take-profit/stop-loss.</li>
-              <li>Basket flow: run cycle, and only use pause if you need to halt execution.</li>
+              <li>Select `Perps` to trade or `Investments` to manage the Alvara basket.</li>
+              <li>Perps: press `Ready Bot`, choose setup, submit entry.</li>
+              <li>Basket: press `Run Basket Cycle` for normal ops, `Pause Basket` only for emergency stop.</li>
             </ol>
           </div>
           {(!investmentsSurface.enabled || !perpsSurface.enabled) && (
@@ -88,7 +86,7 @@ export function InvestmentsPageClient() {
                   : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
               } ${!investmentsSurface.enabled ? 'opacity-80' : ''}`}
             >
-              Investments Core {!investmentsSurface.enabled ? '(disabled)' : ''}
+              Investments {!investmentsSurface.enabled ? '(disabled)' : ''}
             </button>
             <button
               id="investments-tab-perps"
@@ -102,7 +100,7 @@ export function InvestmentsPageClient() {
                   : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
               } ${!perpsSurface.enabled ? 'opacity-80' : ''}`}
             >
-              Perps Sniper {!perpsSurface.enabled ? '(disabled)' : ''}
+              Perps {!perpsSurface.enabled ? '(disabled)' : ''}
             </button>
           </div>
         </section>

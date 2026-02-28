@@ -52,6 +52,8 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
   const [leverage, setLeverage] = useState(3);
   const [tpPct, setTpPct] = useState('10');
   const [slPct, setSlPct] = useState('5');
+  const [riskPreset, setRiskPreset] = useState<'conservative' | 'balanced' | 'aggressive'>('balanced');
+  const [showAdvancedRisk, setShowAdvancedRisk] = useState(false);
   const [orderState, setOrderState] = useState<string>('');
   const [operatorState, setOperatorState] = useState<string>('');
   const [maxTradesPerDay, setMaxTradesPerDay] = useState<number>(40);
@@ -84,6 +86,24 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
       setDailyLossLimitUsd(incomingDailyLoss);
     }
   }, [status?.daily?.max_trades_per_day, status?.daily?.daily_loss_limit_usd]);
+
+  useEffect(() => {
+    if (riskPreset === 'conservative') {
+      setLeverage(2);
+      setTpPct('6');
+      setSlPct('3');
+      return;
+    }
+    if (riskPreset === 'aggressive') {
+      setLeverage(8);
+      setTpPct('15');
+      setSlPct('7');
+      return;
+    }
+    setLeverage(4);
+    setTpPct('10');
+    setSlPct('5');
+  }, [riskPreset]);
 
   return (
     <div className="space-y-4">
@@ -240,9 +260,33 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border-primary bg-bg-secondary p-4">
-          <h3 className="mb-3 text-sm font-semibold text-text-primary">Open Position</h3>
+          <h3 className="mb-2 text-sm font-semibold text-text-primary">Entry Setup</h3>
+          <p className="text-xs text-text-muted">Pick market + side, set amount, choose risk profile, then submit.</p>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {([
+              { id: 'conservative', label: 'Conservative', detail: '2x / 6% TP / 3% SL' },
+              { id: 'balanced', label: 'Balanced', detail: '4x / 10% TP / 5% SL' },
+              { id: 'aggressive', label: 'Aggressive', detail: '8x / 15% TP / 7% SL' },
+            ] as const).map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => setRiskPreset(preset.id)}
+                disabled={featureDisabled}
+                className={`rounded border px-2 py-2 text-left text-[11px] ${
+                  riskPreset === preset.id
+                    ? 'border-accent-neon/40 bg-accent-neon/10 text-accent-neon'
+                    : 'border-border-primary bg-bg-tertiary text-text-muted'
+                }`}
+              >
+                <div className="font-semibold">{preset.label}</div>
+                <div className="mt-0.5 text-[10px] opacity-80">{preset.detail}</div>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-2">
             {(['SOL-USD', 'BTC-USD', 'ETH-USD'] as const).map((m) => (
               <button
                 key={m}
@@ -296,57 +340,58 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
                 className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
               />
             </label>
-            <label className="flex flex-col gap-1 text-text-muted">
-              Leverage ({leverage}x)
-              <input
-                value={leverage}
-                onChange={(e) => setLeverage(Number(e.target.value || 1))}
-                type="range"
-                min={1}
-                max={20}
-                step={1}
-                disabled={featureDisabled}
-                className="rounded border border-border-primary bg-bg-tertiary px-2 py-1"
-              />
-              <div className="mt-1 flex flex-wrap gap-1">
-                {[2, 3, 5, 10].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setLeverage(preset)}
-                    disabled={featureDisabled}
-                    className={`rounded border px-2 py-0.5 text-[11px] ${
-                      leverage === preset
-                        ? 'border-accent-neon/40 bg-accent-neon/10 text-accent-neon'
-                        : 'border-border-primary bg-bg-tertiary text-text-muted'
-                    }`}
-                  >
-                    {preset}x
-                  </button>
-                ))}
+            <div className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-muted">
+              <div className="text-[10px] uppercase tracking-wide">Active Risk</div>
+              <div className="mt-1 text-xs text-text-primary">
+                {leverage}x leverage, TP {tpPct}%, SL {slPct}%
               </div>
-            </label>
-            <label className="flex flex-col gap-1 text-text-muted">
-              Take Profit %
-              <input
-                value={tpPct}
-                onChange={(e) => setTpPct(e.target.value)}
-                type="number"
+              <button
+                type="button"
+                onClick={() => setShowAdvancedRisk((prev) => !prev)}
                 disabled={featureDisabled}
-                className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-text-muted">
-              Stop Loss %
-              <input
-                value={slPct}
-                onChange={(e) => setSlPct(e.target.value)}
-                type="number"
-                disabled={featureDisabled}
-                className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
-              />
-            </label>
+                className="mt-1 rounded border border-border-primary px-2 py-0.5 text-[10px] text-text-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {showAdvancedRisk ? 'Hide Advanced Risk' : 'Adjust Advanced Risk'}
+              </button>
+            </div>
           </div>
+          {showAdvancedRisk && (
+            <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+              <label className="flex flex-col gap-1 text-text-muted">
+                Leverage ({leverage}x)
+                <input
+                  value={leverage}
+                  onChange={(e) => setLeverage(Number(e.target.value || 1))}
+                  type="range"
+                  min={1}
+                  max={20}
+                  step={1}
+                  disabled={featureDisabled}
+                  className="rounded border border-border-primary bg-bg-tertiary px-2 py-1"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-text-muted">
+                Take Profit %
+                <input
+                  value={tpPct}
+                  onChange={(e) => setTpPct(e.target.value)}
+                  type="number"
+                  disabled={featureDisabled}
+                  className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-text-muted">
+                Stop Loss %
+                <input
+                  value={slPct}
+                  onChange={(e) => setSlPct(e.target.value)}
+                  type="number"
+                  disabled={featureDisabled}
+                  className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
+                />
+              </label>
+            </div>
+          )}
           <p className="mt-2 text-xs text-text-muted">
             Estimated notional: <span className="text-text-primary">${tradeNotionalUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
           </p>

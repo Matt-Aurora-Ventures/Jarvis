@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -33,5 +34,8 @@ if __name__ == "__main__":
 
     configure_component_logger("web.perps", prefix="PERPS_API", level=logging.INFO)
     app = create_app()
-    print("Perps API launcher starting on http://127.0.0.1:5001")
-    app.run(host="127.0.0.1", port=5001, debug=True)
+    host = str(os.environ.get("HOST", "0.0.0.0")).strip() or "0.0.0.0"
+    port = int(os.environ.get("PORT", "5001"))
+    debug = str(os.environ.get("FLASK_DEBUG", "false")).strip().lower() in {"1", "true", "yes", "on"}
+    print(f"Perps API launcher starting on http://{host}:{port}")
+    app.run(host=host, port=port, debug=debug)

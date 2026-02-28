@@ -50,10 +50,10 @@ describe('InvestmentsPageClient disabled-surface behavior', () => {
 
     const html = renderToStaticMarkup(<InvestmentsPageClient />);
 
-    expect(html).toContain('Two clear paths: run the Alvara basket or trade Jupiter perps with guided controls.');
+    expect(html).toContain('Two paths only: basket investing or perps execution.');
     expect(html).toContain('Fast path');
-    expect(html).toContain('Investments Core (disabled)');
-    expect(html).toContain('Perps Sniper (disabled)');
+    expect(html).toContain('Investments (disabled)');
+    expect(html).toContain('Perps (disabled)');
     expect(html).toContain('role="tablist"');
     expect(html).toContain('role="tab"');
     expect(html).toContain('role="tabpanel"');

@@ -75,9 +75,18 @@ thoughts/
 .planning/
 .claude/
 .msw/
+.worktrees/
+worktrees/
+temp/
+tmp/
+.tmp/
+archive/
 
 # Node (if any)
 node_modules/
+jarvis-sniper/node_modules/
+jarvis-sniper/.firebase/
+jarvis-sniper/.next/
 
 # Docker (prevent recursive copy)
 Dockerfile*

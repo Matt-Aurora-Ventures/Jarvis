@@ -20,12 +20,6 @@ interface UseInvestmentDataState {
   error: string | null;
 }
 
-function buildInvestmentWriteHeaders(): HeadersInit {
-  const token = String(process.env.NEXT_PUBLIC_INVESTMENTS_ADMIN_TOKEN || '').trim();
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
-}
-
 export function useInvestmentData() {
   const [state, setState] = useState<UseInvestmentDataState>({
     basket: null,
@@ -86,7 +80,6 @@ export function useInvestmentData() {
   const triggerCycle = useCallback(async () => {
     const r = await fetch('/api/investments/trigger-cycle', {
       method: 'POST',
-      headers: buildInvestmentWriteHeaders(),
     });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
@@ -98,7 +91,6 @@ export function useInvestmentData() {
   const activateKillSwitch = useCallback(async () => {
     const r = await fetch('/api/investments/kill-switch/activate', {
       method: 'POST',
-      headers: buildInvestmentWriteHeaders(),
     });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
@@ -110,7 +102,6 @@ export function useInvestmentData() {
   const deactivateKillSwitch = useCallback(async () => {
     const r = await fetch('/api/investments/kill-switch/deactivate', {
       method: 'POST',
-      headers: buildInvestmentWriteHeaders(),
     });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
