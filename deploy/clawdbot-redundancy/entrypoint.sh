@@ -106,6 +106,13 @@ fi
 
 AI_PROVIDER="${AI_PROVIDER:-anthropic}"
 AI_MODEL="${AI_MODEL:-claude-sonnet-4-20250514}"
+if [ -z "${AI_THINKING_DEFAULT:-}" ]; then
+    if [ "$BOT_NAME" = "friday" ]; then
+        AI_THINKING_DEFAULT="max"
+    else
+        AI_THINKING_DEFAULT="normal"
+    fi
+fi
 
 log "Configuring AI provider: $AI_PROVIDER with model: $AI_MODEL"
 
@@ -152,6 +159,34 @@ esac
 # Export for OpenClaw to use
 export AI_PROVIDER
 export AI_MODEL
+export AI_THINKING_DEFAULT
+
+log "Thinking default configured: $AI_THINKING_DEFAULT"
+
+# Keep bot runtime config aligned with model + thinking defaults.
+if [ -f "$BOT_CONFIG" ] && command -v jq &> /dev/null; then
+    TMP_BOT_CONFIG="$(mktemp)"
+    if jq \
+        --arg ai_model "$AI_MODEL" \
+        --arg thinking_default "$AI_THINKING_DEFAULT" \
+        '
+        .agents = (.agents // {}) |
+        .agents.defaults = (.agents.defaults // {}) |
+        .agents.defaults.model = (.agents.defaults.model // {}) |
+        .agents.defaults.model.primary = $ai_model |
+        .agents.defaults.thinkingDefault = $thinking_default
+        ' \
+        "$BOT_CONFIG" > "$TMP_BOT_CONFIG"; then
+        mv "$TMP_BOT_CONFIG" "$BOT_CONFIG"
+        chmod 600 "$BOT_CONFIG" 2>/dev/null || true
+        log "Bot config model + thinking defaults synced"
+    else
+        rm -f "$TMP_BOT_CONFIG"
+        log "WARNING: Failed to sync model/thinking defaults into $BOT_CONFIG"
+    fi
+else
+    log "Bot config not found or jq unavailable; skipping model/thinking sync"
+fi
 
 log "✅ AI provider configured: $AI_PROVIDER / $AI_MODEL"
 

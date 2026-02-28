@@ -38,7 +38,7 @@
     "_comment": "Bot-specific models - set via environment variables",
     "jarvis": "xai/grok-beta",
     "matt": "anthropic/claude-sonnet-4-20250514",
-    "friday": "anthropic/claude-opus-4-20250514",
+    "friday": "anthropic/claude-opus-4-6",
     "yoda": "nvidia/moonshotai/kimi-k2.5",
     "squishy": "google/gemini-2.5-pro-preview-05-06"
   },
@@ -69,6 +69,12 @@
       "google": {
         "api_key": "${GOOGLE_AI_API_KEY}"
       }
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "thinkingDefault": "${AI_THINKING_DEFAULT:-normal}"
     }
   },
 

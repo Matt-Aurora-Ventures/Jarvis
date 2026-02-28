@@ -81,7 +81,7 @@ done
 
 echo ""
 echo "=== Deployment Complete ==="
-echo "Friday (CMO): http://localhost:18789 - Claude Opus 4.5"
+echo "Friday (CMO): http://localhost:18789 - Claude Opus 4.6"
 echo "Matt   (COO): http://localhost:18790 - Codex CLI Driver"
 echo "Jarvis (CTO): http://localhost:18791 - Grok"
 echo ""

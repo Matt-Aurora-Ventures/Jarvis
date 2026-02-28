@@ -6,7 +6,7 @@
     "structure": {
       "friday": {
         "role": "CMO (Chief Marketing Officer)",
-        "model": "Claude Opus 4.5",
+        "model": "Claude Opus 4.6",
         "responsibilities": ["Marketing strategy", "Content creation", "Community engagement"],
         "canRestartBots": ["matt", "jarvis"]
       },

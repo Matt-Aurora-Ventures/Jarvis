@@ -44,7 +44,7 @@ if [ ! -f "$MEMORY_FILE" ]; then
 CTO/CFO - Technical decisions and financial analysis
 
 ## Team
-- Friday (CMO): Marketing via Claude Opus 4.5
+- Friday (CMO): Marketing via Claude Opus 4.6
 - Matt (COO): Operations via Codex/GPT 5.2
 - Jarvis (self): CTO/CFO via Grok 4.1
 

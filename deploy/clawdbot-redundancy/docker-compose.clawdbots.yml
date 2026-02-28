@@ -62,9 +62,10 @@ services:
       - DOCKER_API_VERSION=1.44
       - REDIS_HOST=jarvis-redis
       - REDIS_PORT=6379
-      # Friday: Claude Opus 4
+      # Friday: Claude Opus 4.6
       - AI_PROVIDER=anthropic
-      - AI_MODEL=claude-opus-4-20250514
+      - AI_MODEL=claude-opus-4-6
+      - AI_THINKING_DEFAULT=max
       - ANTHROPIC_OAUTH_ACCESS=${ANTHROPIC_OAUTH_ACCESS:-}
       - ANTHROPIC_OAUTH_REFRESH=${ANTHROPIC_OAUTH_REFRESH:-}
       # Infrastructure

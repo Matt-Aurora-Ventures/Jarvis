@@ -5,7 +5,7 @@
 
   "profiles": {
     "anthropic": {
-      "_comment": "Claude models (Friday: Opus 4, Matt: Sonnet 4.5)",
+      "_comment": "Claude models (Friday: Opus 4.6, Matt: Sonnet 4)",
       "type": "oauth",
       "provider": "anthropic",
       "oauth_access_token": "${ANTHROPIC_OAUTH_ACCESS}",
@@ -53,7 +53,7 @@
     "friday": {
       "primary": "anthropic",
       "fallback": "nvidia",
-      "model": "claude-opus-4-20250514"
+      "model": "claude-opus-4-6"
     },
     "yoda": {
       "primary": "nvidia",

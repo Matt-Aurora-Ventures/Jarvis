@@ -3,7 +3,7 @@
 # Base: node:22-slim
 #
 # Agents supported:
-# - Friday (CMO): Claude Opus 4 - Port 18789
+# - Friday (CMO): Claude Opus 4.6 - Port 18789
 # - Matt (COO): Claude Sonnet 4.5 - Port 18800
 # - Jarvis (CTO): Grok 4.1 - Port 18801
 # - Yoda (CIO): Kimi 2.5 - Port 18792 (Hetzner)
