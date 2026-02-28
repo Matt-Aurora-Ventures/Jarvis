@@ -389,8 +389,11 @@ async def main():
             logger.error("Telegram polling lock is already held; exiting to avoid 409 conflicts")
             return
     except Exception as exc:
-        logger.warning(f"Could not acquire polling lock (continuing): {exc}")
-        lock = None
+        logger.exception(
+            "Failed to acquire Telegram polling lock; exiting to avoid token poller conflicts: %s",
+            exc,
+        )
+        return
 
     # Optional external heartbeat ping (e.g., healthchecks/betterstack/custom webhook).
     matt_hb_url = os.environ.get("MATT_HEARTBEAT_URL", "").strip()

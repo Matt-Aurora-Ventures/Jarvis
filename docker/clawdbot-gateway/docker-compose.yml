@@ -40,9 +40,9 @@ services:
       bash -c '
         set -e
 
-        # Install openclaw 2026.2.3
+        # Install openclaw 2026.2.26 security baseline
         if ! command -v openclaw &>/dev/null; then
-          npm install -g openclaw@2026.2.3 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
+          npm install -g openclaw@2026.2.26 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
         fi
         # Keep clawdbot alias for compatibility
         if ! command -v clawdbot &>/dev/null && command -v openclaw &>/dev/null; then
@@ -59,6 +59,10 @@ services:
             "auth": {
               "mode": "token",
               "token": "${FRIDAY_AUTH_TOKEN}"
+            },
+            "controlUi": {
+              "allowInsecureAuth": false,
+              "dangerouslyDisableDeviceAuth": false
             }
           },
           "agents": {
@@ -75,9 +79,13 @@ services:
             "telegram": {
               "enabled": true,
               "botToken": "${FRIDAY_TELEGRAM_TOKEN}",
+              "configWrites": false,
               "allowFrom": ["@matthaynes88"],
               "ignoreUsers": ["ClawdMatt_bot", "ClawdJarvis_bot"]
             }
+          },
+          "commands": {
+            "config": false
           },
           "memory": {
             "enabled": true,
@@ -144,9 +152,9 @@ services:
       bash -c '
         set -e
 
-        # Install openclaw 2026.2.3 + codex CLI
+        # Install openclaw 2026.2.26 security baseline + codex CLI
         if ! command -v openclaw &>/dev/null; then
-          npm install -g openclaw@2026.2.3 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
+          npm install -g openclaw@2026.2.26 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
         fi
         # Keep clawdbot alias for compatibility
         if ! command -v clawdbot &>/dev/null && command -v openclaw &>/dev/null; then
@@ -166,13 +174,17 @@ services:
             "auth": {
               "mode": "token",
               "token": "${MATT_AUTH_TOKEN}"
+            },
+            "controlUi": {
+              "allowInsecureAuth": false,
+              "dangerouslyDisableDeviceAuth": false
             }
           },
           "agents": {
             "defaults": {
               "model": {
-                "primary": "anthropic/claude-sonnet-4-20250514",
-                "fallback": ["xai/grok-3"]
+                "primary": "openai-codex/gpt-5.3-codex",
+                "fallback": ["anthropic/claude-sonnet-4-20250514", "xai/grok-3"]
               },
               "workspace": "/root/clawd",
               "tools": {
@@ -222,9 +234,13 @@ services:
             "telegram": {
               "enabled": true,
               "botToken": "${MATT_TELEGRAM_TOKEN}",
+              "configWrites": false,
               "allowFrom": ["@matthaynes88"],
               "ignoreUsers": ["ClawdFriday_bot", "ClawdJarvis_bot"]
             }
+          },
+          "commands": {
+            "config": false
           },
           "memory": {
             "enabled": true,
@@ -291,9 +307,9 @@ services:
       bash -c '
         set -e
 
-        # Install openclaw 2026.2.3
+        # Install openclaw 2026.2.26 security baseline
         if ! command -v openclaw &>/dev/null; then
-          npm install -g openclaw@2026.2.3 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
+          npm install -g openclaw@2026.2.26 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
         fi
         # Keep clawdbot alias for compatibility
         if ! command -v clawdbot &>/dev/null && command -v openclaw &>/dev/null; then
@@ -310,6 +326,10 @@ services:
             "auth": {
               "mode": "token",
               "token": "${JARVIS_AUTH_TOKEN}"
+            },
+            "controlUi": {
+              "allowInsecureAuth": false,
+              "dangerouslyDisableDeviceAuth": false
             }
           },
           "agents": {
@@ -325,9 +345,13 @@ services:
             "telegram": {
               "enabled": true,
               "botToken": "${JARVIS_TELEGRAM_TOKEN}",
+              "configWrites": false,
               "allowFrom": ["@matthaynes88"],
               "ignoreUsers": ["ClawdFriday_bot", "ClawdMatt_bot"]
             }
+          },
+          "commands": {
+            "config": false
           },
           "memory": {
             "enabled": true,
@@ -388,9 +412,9 @@ services:
       bash -c '
         set -e
 
-        # Install openclaw 2026.2.3
+        # Install openclaw 2026.2.26 security baseline
         if ! command -v openclaw &>/dev/null; then
-          npm install -g openclaw@2026.2.3 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
+          npm install -g openclaw@2026.2.26 2>/dev/null || npm install -g openclaw@latest 2>/dev/null
         fi
         # Keep clawdbot alias for compatibility
         if ! command -v clawdbot &>/dev/null && command -v openclaw &>/dev/null; then
@@ -407,6 +431,10 @@ services:
             "auth": {
               "mode": "token",
               "token": "${YODA_AUTH_TOKEN}"
+            },
+            "controlUi": {
+              "allowInsecureAuth": false,
+              "dangerouslyDisableDeviceAuth": false
             }
           },
           "agents": {
@@ -423,9 +451,13 @@ services:
             "telegram": {
               "enabled": true,
               "botToken": "${YODA_TELEGRAM_TOKEN}",
+              "configWrites": false,
               "allowFrom": ["@matthaynes88"],
               "ignoreUsers": ["ClawdFriday_bot", "ClawdMatt_bot", "ClawdJarvis_bot"]
             }
+          },
+          "commands": {
+            "config": false
           },
           "memory": {
             "enabled": true,
