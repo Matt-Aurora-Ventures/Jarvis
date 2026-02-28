@@ -62,17 +62,50 @@ class ConsensusArena:
                 results.append(item)
         return results
 
-    async def run(self, prompt: str) -> Dict[str, Any]:
-        candidates = await self.fanout(prompt)
+    def _prompt_with_gsd_context(
+        self,
+        prompt: str,
+        *,
+        gsd_spec_enabled: bool,
+        gsd_context_ref: str | None,
+    ) -> str:
+        if not gsd_spec_enabled:
+            return prompt
+        lines = [
+            "GSD Spec-Driven Evaluation:",
+            "- Apply spec -> plan -> execute -> verify gates in the recommendation.",
+            "- Explicitly call out blocking gates and next action.",
+        ]
+        if gsd_context_ref:
+            lines.append(f"- Context reference: {gsd_context_ref}")
+        lines.extend(["", prompt])
+        return "\n".join(lines)
+
+    async def run(
+        self,
+        prompt: str,
+        *,
+        gsd_spec_enabled: bool = False,
+        gsd_context_ref: str | None = None,
+    ) -> Dict[str, Any]:
+        effective_prompt = self._prompt_with_gsd_context(
+            prompt,
+            gsd_spec_enabled=gsd_spec_enabled,
+            gsd_context_ref=gsd_context_ref,
+        )
+        candidates = await self.fanout(effective_prompt)
         ranked = score_candidates(candidates, thresholds=self.thresholds)
         winner = ranked[0] if ranked else None
 
         synthesis = {
             "prompt": prompt,
+            "effective_prompt": effective_prompt,
             "winner": winner,
             "ranked": ranked,
             "candidates": candidates,
             "consensus_reached": bool(winner and winner.get("passes_threshold")),
+            "gsd_spec_enabled": gsd_spec_enabled,
+            "gsd_context_ref": gsd_context_ref,
         }
 
         await self._log_to_supermemory(synthesis)

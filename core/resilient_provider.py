@@ -255,7 +255,11 @@ class ResilientProviderChain:
 
         if provider_name == "consensus":
             arena = ConsensusArena(models=models or ["openai/gpt-4o-mini", "groq/llama3-70b-8192"])
-            synthesis = await arena.run(prompt)
+            synthesis = await arena.run(
+                prompt,
+                gsd_spec_enabled=bool(metadata.get("gsd_spec_enabled")),
+                gsd_context_ref=(metadata.get("gsd_context_ref") if isinstance(metadata.get("gsd_context_ref"), str) else None),
+            )
             return self._normalize_prompt_result("consensus", synthesis)
 
         if provider_name == "nosana":
@@ -327,6 +331,36 @@ class ResilientProviderChain:
             )
 
         return await self.execute(task_type=task_type, call_fn=_call, fallback_value=None)
+
+    async def execute_consensus(
+        self,
+        query: str,
+        *,
+        panel: Optional[List[str]] = None,
+        gsd_spec_enabled: bool = False,
+        gsd_context_ref: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Execute query through consensus route with optional GSD context injection."""
+        return await self.execute_prompt(
+            query,
+            task_type="complex",
+            models=panel,
+            metadata={
+                "gsd_spec_enabled": gsd_spec_enabled,
+                "gsd_context_ref": gsd_context_ref,
+            },
+        )
+
+    async def execute_nosana(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Execute a nosana heavy-compute payload through the resilient provider chain."""
+        prompt = str(payload.get("prompt", "")).strip()
+        metadata = dict(payload.get("metadata") or {})
+        metadata.setdefault("job_name", payload.get("name", "jarvis-nosana-inference"))
+        return await self.execute_prompt(
+            prompt,
+            task_type="research",
+            metadata=metadata,
+        )
 
     def get_available_provider(self, task_type: str = "chat") -> Optional[str]:
         """

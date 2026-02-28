@@ -20,6 +20,7 @@ import signal
 import socket
 import time
 import tempfile
+import importlib.util
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Callable, Any
@@ -685,6 +686,35 @@ def _env_flag(name: str, default: bool) -> bool:
 def _cooldown_mode() -> bool:
     """Master kill-switch for cost-heavy / risky components."""
     return _env_flag("JARVIS_COOLDOWN_MODE", False)
+
+
+def _module_available(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
+
+
+def log_runtime_capability_report() -> None:
+    """Emit startup capability summary and degraded-mode warnings."""
+    arena_enabled = _env_flag("JARVIS_USE_ARENA", _env_flag("JARVIS_COMPLEX_QUERY_ARENA", False))
+    nosana_enabled = _env_flag("JARVIS_USE_NOSANA", False)
+    litellm_available = _module_available("litellm")
+    supermemory_available = _module_available("supermemory")
+    nosana_key_present = bool(os.environ.get("NOSANA_API_KEY", "").strip())
+
+    logger.info(
+        "runtime.capabilities arena_enabled=%s litellm_available=%s supermemory_available=%s nosana_enabled=%s nosana_key_present=%s",
+        arena_enabled,
+        litellm_available,
+        supermemory_available,
+        nosana_enabled,
+        nosana_key_present,
+    )
+
+    if arena_enabled and not litellm_available:
+        logger.warning("runtime.degraded arena requested but litellm unavailable; falling back to local provider path")
+    if not supermemory_available:
+        logger.warning("runtime.degraded supermemory package unavailable; context hooks disabled")
+    if nosana_enabled and not nosana_key_present:
+        logger.warning("runtime.degraded nosana requested but NOSANA_API_KEY missing; nosana route disabled")
 
 
 async def create_buy_bot():
@@ -1557,6 +1587,7 @@ async def main():
         sys.exit(1)
 
     load_env()
+    log_runtime_capability_report()
 
     # ==========================================================
     # MCP SERVERS: Optional MCP toolchain for local agents
