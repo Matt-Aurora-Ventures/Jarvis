@@ -28,12 +28,17 @@
 5. First canary boot failed due legacy persisted config key incompatibility.
 6. Recovered canary by rotating Arsenal data volume to a fresh path and redeploying:
    - service recovered to healthy state on `latest`.
+7. Applied same clean-state migration to Friday runtime (`openclaw-ydy8`):
+   - moved to `latest`
+   - forced `OPENCLAW_GATEWAY_BIND=localhost`
+   - fresh data path (`data_v2`)
+   - confirmed active model is `anthropic/claude-opus-4-6`.
 
 ## Current State (post-canary)
 - `openclaw-arsenal`: `running`, `healthy`, image `latest`
 - `openclaw-edith`: `running`, `healthy`, image `stable-20260220`
 - `openclaw-jocasta`: `running`, `healthy`, image `stable-20260220`
-- `openclaw-ydy8`: `running`, `healthy`, image `stable-20260220`
+- `openclaw-ydy8`: `running`, `healthy`, image `latest`
 - Mission Control stack: healthy
 
 ## Observed Gaps Still Open
@@ -46,5 +51,5 @@
 1. Align all bot projects to a single known-good image/version and migrate legacy config keys safely.
 2. Force-disable WhatsApp plugin path where not used.
 3. Enforce one-poller-per-token at runtime level and confirm no external duplicate pollers.
-4. Reconcile model/provider credentials so Arsenal can run `openai-codex/gpt-5.3-codex` deterministically.
+4. Reconcile model/provider credentials/runtime mapping so Arsenal can run `openai-codex/gpt-5.3-codex` deterministically.
 5. Add a 30-minute soak gate with explicit pass/fail criteria before additional production changes.
