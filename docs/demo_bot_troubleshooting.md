@@ -64,7 +64,7 @@
    Look for errors after sending `/demo`
 
 3. **Verify Handler Registration**
-   ```python
+   ```text
    # In tg_bot/bot.py
    from tg_bot.handlers.demo import register_demo_handlers
    register_demo_handlers(app)  # Must be present
@@ -158,7 +158,7 @@ for p in positions:
    ```
 
 2. **Check Order Status**
-   ```python
+   ```text
    from core.database import get_session
    from tg_bot.handlers.demo.models import DemoTPSLOrder
 
@@ -180,7 +180,7 @@ for p in positions:
    ```
 
 4. **Manual Trigger**
-   ```python
+   ```text
    from tg_bot.handlers.demo.demo_orders import _process_demo_exit_checks
 
    # Force check for specific position
@@ -290,7 +290,7 @@ python scripts/reset_demo_wallet.py
 **Debug:**
 
 1. **Profile Handler**
-   ```python
+   ```text
    import time
 
    start = time.time()
@@ -300,7 +300,7 @@ python scripts/reset_demo_wallet.py
    ```
 
 2. **Check Database Queries**
-   ```python
+   ```text
    from sqlalchemy import event
    from sqlalchemy.engine import Engine
 
@@ -310,7 +310,7 @@ python scripts/reset_demo_wallet.py
    ```
 
 3. **Check API Response Times**
-   ```python
+   ```text
    start = time.time()
    response = await api_call()
    elapsed = time.time() - start
@@ -426,7 +426,7 @@ curl http://localhost:8000/health
 **If modular bot has critical issues:**
 
 1. **Update imports in bot.py:**
-   ```python
+   ```text
    # Change from:
    from tg_bot.handlers.demo import register_demo_handlers
 

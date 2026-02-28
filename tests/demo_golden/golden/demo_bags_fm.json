@@ -1,28 +1,64 @@
 {
-  "text": "\ud83c\udf92 *BAGS.FM TOP 15*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\nMarket: \ud83d\udfe2 BULL | 24h Vol: $2.2M\n\n*Volume Leaders with AI Sentiment:*\n\n\ud83e\udd47 *TEST* $0.012300 \ud83d\udfe2 +5.6%\n   Vol: $1.2M | Liq: $480K\n   \ud83d\udfe2 BULLISH | \ud83d\udfe2 BUY\n   \ud83d\udcdd `So111111...111112`\n\n\ud83e\udd48 *MOON* $0.004200 \ud83d\udd34 -3.4%\n   Vol: $980K | Liq: $210K\n   \ud83d\udfe1 NEUTRAL | \ud83d\udfe1 HOLD\n   \ud83d\udcdd `DezXAZ8z...pPB263`\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcca *Sentiment Summary*\n   \ud83d\udfe2 Bullish: 1 | \ud83d\udd34 Bearish: 0\n\n_Default TP: +15% | SL: -15%_",
+  "text": "\ud83c\udf92 *BAGS.FM TOP 15*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\nMarket: \ud83d\udfe2 BULL | 24h Vol: $2.2M | Src: bags.fm\n\n*Volume Leaders with AI Sentiment:*\n\n\ud83e\udd47 *TEST* $0.012300 \ud83d\udfe2 +5.6%\n   MC: $12.00M | Vol: $1.2M | Liq: $480K\n   \ud83d\udfe2 BULLISH | \ud83d\udfe2 BUY | AI: \u25b0\u25b0\u25b0\u25b1\u25b1 (72%)\n   \ud83e\udde0 Why: Vol/Liq 2.60x | 24h +5.6% | Holders 1,234\n   \ud83d\udccb CA: `So111111...111112`\n\n\ud83e\udd48 *MOON* $0.004200 \ud83d\udd34 -3.4%\n   MC: $4.20M | Vol: $980K | Liq: $210K\n   \ud83d\udfe1 NEUTRAL | \ud83d\udfe1 HOLD | AI: \u25b0\u25b0\u25b1\u25b1\u25b1 (51%)\n   \ud83e\udde0 Why: Vol/Liq 4.67x | 24h -3.4% | Holders 842\n   \ud83d\udccb CA: `DezXAZ8z...pPB263`\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcca *Sentiment Summary*\n   \ud83d\udfe2 Bullish: 1 | \ud83d\udd34 Bearish: 0\n\n_Default TP: +15% | SL: -15%_",
   "parse_mode": "Markdown",
   "keyboard": [
     [
       {
-        "text": "\ud83d\udcb0 Buy 0.1 SOL of TEST",
+        "text": "\ud83d\udcb0 Buy 0.1 TEST",
         "callback_data": "demo:bags_exec:35f4d5cab4:0.1:15.0:15.0"
+      },
+      {
+        "text": "\ud83d\udcb0 Buy\u2026",
+        "callback_data": "demo:buy_custom:35f4d5cab4"
       }
     ],
     [
       {
-        "text": "\ud83d\udd0d View TEST Details",
+        "text": "\ud83d\udd17 Solscan",
+        "callback_data": null
+      },
+      {
+        "text": "\ud83d\udccb Copy CA",
+        "callback_data": "demo:copy_ca:35f4d5cab4"
+      },
+      {
+        "text": "\ud83d\udcca Chart",
+        "callback_data": null
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd0d Details",
         "callback_data": "demo:bags_info:35f4d5cab4"
       }
     ],
     [
       {
-        "text": "\ud83d\udcb0 Buy 0.1 SOL of MOON",
+        "text": "\ud83d\udcb0 Buy 0.1 MOON",
         "callback_data": "demo:bags_exec:d54bf9a14e:0.1:15.0:15.0"
+      },
+      {
+        "text": "\ud83d\udcb0 Buy\u2026",
+        "callback_data": "demo:buy_custom:d54bf9a14e"
       }
     ],
     [
       {
-        "text": "\ud83d\udd0d View MOON Details",
+        "text": "\ud83d\udd17 Solscan",
+        "callback_data": null
+      },
+      {
+        "text": "\ud83d\udccb Copy CA",
+        "callback_data": "demo:copy_ca:d54bf9a14e"
+      },
+      {
+        "text": "\ud83d\udcca Chart",
+        "callback_data": null
+      }
+    ],
+    [
+      {
+        "text": "\ud83d\udd0d Details",
         "callback_data": "demo:bags_info:d54bf9a14e"
       }
     ],
@@ -40,6 +76,12 @@
       {
         "text": "\u25c0\ufe0f Main Menu",
         "callback_data": "demo:main"
+      }
+    ],
+    [
+      {
+        "text": "\u21a9\ufe0f Previous Menu",
+        "callback_data": "demo:nav_back"
       }
     ]
   ]

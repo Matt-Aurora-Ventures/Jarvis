@@ -394,7 +394,7 @@ def test_no_override():
    ```
 
 2. **Add override=False**
-   ```python
+   ```text
    # Before
    load_dotenv(".env")
 
@@ -403,7 +403,7 @@ def test_no_override():
    ```
 
 3. **Move to function scope**
-   ```python
+   ```text
    # Before (module-level)
    from dotenv import load_dotenv
    load_dotenv()
@@ -419,7 +419,7 @@ def test_no_override():
    ```
 
 4. **Add validation**
-   ```python
+   ```text
    if not self.api_key:
        raise ValueError("API_KEY required by MyComponent")
    ```

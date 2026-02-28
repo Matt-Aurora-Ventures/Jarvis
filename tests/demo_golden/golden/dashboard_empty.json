@@ -21,6 +21,12 @@
         "text": "balance",
         "callback_data": "refresh_balance"
       }
+    ],
+    [
+      {
+        "text": "\u21a9\ufe0f Previous Menu",
+        "callback_data": "menu_back"
+      }
     ]
   ]
 }

@@ -133,16 +133,16 @@ except ImportError:
 # Jarvis personality responses
 JARVIS_GREETINGS = [
     "At your service, sir.",
-    "How may I assist you today?",
-    "Yes, what do you need?",
-    "Jarvis online. What's the mission?",
+    "How may I assist you today-",
+    "Yes, what do you need-",
+    "Jarvis online. What's the mission-",
     "Ready and waiting.",
 ]
 
 JARVIS_CAPABILITIES = """
 JARVIS System Capabilities:
 
-🖥️ Computer Control (via Tailscale):
+?? Computer Control (via Tailscale):
 - /browse <task> - LLM-native browser automation
 - /computer <task> - Full Windows computer control
 - /remote - Check remote control status
@@ -203,7 +203,7 @@ Commands:
 /help - Show this help message
 
 Examples:
-/jarvis What's the current market sentiment?
+/jarvis What's the current market sentiment-
 /browse Go to coingecko.com and get SOL price
 /computer List files in Downloads folder
 /system
@@ -264,9 +264,9 @@ async def handle_browse(message):
             message,
             "Usage: /browse <task>\n\n"
             "Examples:\n"
-            "• /browse Go to coingecko.com and get SOL price\n"
-            "• /browse Check twitter.com/Jarvis_lifeos notifications\n"
-            "• /browse Search google for 'solana ecosystem news'"
+            "? /browse Go to coingecko.com and get SOL price\n"
+            "? /browse Check twitter.com/Jarvis_lifeos notifications\n"
+            "? /browse Search google for 'solana ecosystem news'"
         )
         return
 
@@ -277,13 +277,13 @@ async def handle_browse(message):
             await bot.reply_to(message, f"Blocked: {reason}")
             return
 
-    await bot.reply_to(message, f"🌐 Browsing: {task[:50]}...\nThis may take a moment.")
+    await bot.reply_to(message, f"? Browsing: {task[:50]}...\nThis may take a moment.")
 
     try:
         result = await browse_web(task)
-        response = f"🌐 Browser Result:\n\n{result[:3500]}"  # Telegram limit
+        response = f"? Browser Result:\n\n{result[:3500]}"  # Telegram limit
     except Exception as e:
-        response = f"❌ Browser error: {str(e)}"
+        response = f"? Browser error: {str(e)}"
 
     await bot.reply_to(message, response)
 
@@ -304,20 +304,20 @@ async def handle_computer(message):
             message,
             "Usage: /computer <task>\n\n"
             "Examples:\n"
-            "• /computer What files are in Downloads folder?\n"
-            "• /computer Open notepad and write 'hello world'\n"
-            "• /computer Take a screenshot of the desktop\n"
-            "• /computer Check what programs are running"
+            "? /computer What files are in Downloads folder-\n"
+            "? /computer Open notepad and write 'hello world'\n"
+            "? /computer Take a screenshot of the desktop\n"
+            "? /computer Check what programs are running"
         )
         return
 
-    await bot.reply_to(message, f"🖥️ Executing: {task[:50]}...\nThis may take a moment.")
+    await bot.reply_to(message, f"?? Executing: {task[:50]}...\nThis may take a moment.")
 
     try:
         result = await control_computer(task)
-        response = f"🖥️ Computer Result:\n\n{result[:3500]}"
+        response = f"?? Computer Result:\n\n{result[:3500]}"
     except Exception as e:
-        response = f"❌ Computer control error: {str(e)}"
+        response = f"? Computer control error: {str(e)}"
 
     await bot.reply_to(message, response)
 
@@ -332,14 +332,14 @@ async def handle_remote_status(message):
         await bot.reply_to(message, "Computer control module not available.")
         return
 
-    await bot.reply_to(message, "🔍 Checking remote control status...")
+    await bot.reply_to(message, "? Checking remote control status...")
 
     try:
         status = await check_remote_status()
         if status.get("available"):
-            caps = "\n".join(f"  • {c}" for c in status.get("capabilities", []))
+            caps = "\n".join(f"  ? {c}" for c in status.get("capabilities", []))
             response = f"""
-✅ Remote Control: AVAILABLE
+? Remote Control: AVAILABLE
 
 Host: {status.get('host')}
 
@@ -350,7 +350,7 @@ Use /browse or /computer to control the Windows machine.
 """
         else:
             response = f"""
-❌ Remote Control: UNAVAILABLE
+? Remote Control: UNAVAILABLE
 
 Host: {status.get('host')}
 Error: {status.get('error', 'Unknown')}
@@ -361,7 +361,7 @@ Make sure:
 3. Tailscale is connected
 """
     except Exception as e:
-        response = f"❌ Status check error: {str(e)}"
+        response = f"? Status check error: {str(e)}"
 
     await bot.reply_to(message, response)
 
@@ -373,16 +373,16 @@ async def handle_jarvis(message):
     question = message.text.replace('/jarvis', '', 1).strip()
 
     if not question:
-        await bot.reply_to(message, "Yes? What would you like to know?")
+        await bot.reply_to(message, "Yes- What would you like to know-")
         return
 
     question_lower = question.lower()
 
     # Simple response logic
     if "hello" in question_lower or "hi" in question_lower:
-        response = "Hello! How may I assist you today?"
+        response = "Hello! How may I assist you today-"
     elif "status" in question_lower:
-        response = "All systems are operational. Would you like a detailed status report? Use /system."
+        response = "All systems are operational. Would you like a detailed status report- Use /system."
     elif "trading" in question_lower:
         response = "Trading systems are on standby. The treasury bot handles autonomous Solana token trading with risk management."
     elif "market" in question_lower or "sentiment" in question_lower:
@@ -394,7 +394,7 @@ async def handle_jarvis(message):
     elif "who are you" in question_lower or "what are you" in question_lower:
         response = "I am JARVIS - Just A Rather Very Intelligent System. An autonomous LifeOS assistant for trading, AI coordination, and system orchestration."
     elif "help" in question_lower:
-        response = "I can help with trading, market analysis, email processing, and PR filtering. What specific area would you like assistance with?"
+        response = "I can help with trading, market analysis, email processing, and PR filtering. What specific area would you like assistance with-"
     else:
         response = f"Analyzing your query: '{question}'\n\nI'm currently in basic mode without external AI access. For full capabilities, ensure the Grok or Claude API is configured."
 

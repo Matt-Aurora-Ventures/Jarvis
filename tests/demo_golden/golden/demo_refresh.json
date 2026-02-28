@@ -153,6 +153,12 @@
         "text": "\u2716\ufe0f Close",
         "callback_data": "demo:close"
       }
+    ],
+    [
+      {
+        "text": "\u21a9\ufe0f Previous Menu",
+        "callback_data": "demo:nav_back"
+      }
     ]
   ]
 }

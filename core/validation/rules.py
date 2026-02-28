@@ -25,7 +25,7 @@ import re
 import uuid as uuid_module
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Optional, Pattern
+from typing import Any, Callable, List, Optional as TypingOptional, Pattern
 
 
 @dataclass
@@ -81,7 +81,7 @@ class Required(Rule):
         allow_empty: If True, allow empty strings (default False)
     """
 
-    def __init__(self, message: Optional[str] = None, allow_empty: bool = False):
+    def __init__(self, message: TypingOptional[str] = None, allow_empty: bool = False):
         self.message = message or "This field is required"
         self.allow_empty = allow_empty
 
@@ -249,7 +249,7 @@ class MinLength(Rule):
         message: Custom error message
     """
 
-    def __init__(self, min_len: int, message: Optional[str] = None):
+    def __init__(self, min_len: int, message: TypingOptional[str] = None):
         self.min_len = min_len
         self.message = message
 
@@ -276,7 +276,7 @@ class MaxLength(Rule):
         message: Custom error message
     """
 
-    def __init__(self, max_len: int, message: Optional[str] = None):
+    def __init__(self, max_len: int, message: TypingOptional[str] = None):
         self.max_len = max_len
         self.message = message
 
@@ -303,7 +303,7 @@ class Pattern(Rule):
         message: Custom error message
     """
 
-    def __init__(self, pattern: str, message: Optional[str] = None):
+    def __init__(self, pattern: str, message: TypingOptional[str] = None):
         self.pattern_str = pattern
         self.pattern: Pattern = re.compile(pattern)
         self.message = message or f"Must match pattern: {pattern}"
@@ -331,7 +331,7 @@ class Min(Rule):
         message: Custom error message
     """
 
-    def __init__(self, min_value: float, exclusive: bool = False, message: Optional[str] = None):
+    def __init__(self, min_value: float, exclusive: bool = False, message: TypingOptional[str] = None):
         self.min_value = min_value
         self.exclusive = exclusive
         self.message = message
@@ -365,7 +365,7 @@ class Max(Rule):
         message: Custom error message
     """
 
-    def __init__(self, max_value: float, exclusive: bool = False, message: Optional[str] = None):
+    def __init__(self, max_value: float, exclusive: bool = False, message: TypingOptional[str] = None):
         self.max_value = max_value
         self.exclusive = exclusive
         self.message = message
@@ -399,7 +399,7 @@ class Range(Rule):
         message: Custom error message
     """
 
-    def __init__(self, min_value: float, max_value: float, message: Optional[str] = None):
+    def __init__(self, min_value: float, max_value: float, message: TypingOptional[str] = None):
         self.min_value = min_value
         self.max_value = max_value
         self.message = message
@@ -434,7 +434,7 @@ class Email(Rule):
         r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     )
 
-    def __init__(self, message: Optional[str] = None):
+    def __init__(self, message: TypingOptional[str] = None):
         self.message = message or "Invalid email format"
 
     def validate(self, value: Any) -> RuleResult:
@@ -466,7 +466,7 @@ class URL(Rule):
         re.IGNORECASE
     )
 
-    def __init__(self, require_https: bool = False, message: Optional[str] = None):
+    def __init__(self, require_https: bool = False, message: TypingOptional[str] = None):
         self.require_https = require_https
         self.message = message or "Invalid URL format"
 
@@ -491,7 +491,7 @@ class UUID(Rule):
         message: Custom error message
     """
 
-    def __init__(self, message: Optional[str] = None):
+    def __init__(self, message: TypingOptional[str] = None):
         self.message = message or "Invalid UUID format"
 
     def validate(self, value: Any) -> RuleResult:
@@ -520,7 +520,7 @@ class Custom(Rule):
         rule = Custom(is_even, message="Must be an even number")
     """
 
-    def __init__(self, func: Callable[[Any], bool], message: Optional[str] = None):
+    def __init__(self, func: Callable[[Any], bool], message: TypingOptional[str] = None):
         self.func = func
         self.message = message or "Custom validation failed"
 

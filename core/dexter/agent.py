@@ -274,6 +274,24 @@ class DexterAgent:
             return scratchpad.get_summary()
         return ""
 
+    def scratchpad_tools(self) -> List[str]:
+        """Return tools observed in scratchpad/actions (legacy compatibility)."""
+        tools: List[str] = []
+        seen = set()
+
+        for entry in self.scratchpad:
+            tool = entry.get("tool") if isinstance(entry, dict) else None
+            if tool and tool not in seen:
+                seen.add(tool)
+                tools.append(tool)
+
+        for tool in self._tools_used:
+            if tool not in seen:
+                seen.add(tool)
+                tools.append(tool)
+
+        return tools
+
     async def _get_grok_client(self):
         """Get or initialize Grok client."""
         if self._grok_client is None:

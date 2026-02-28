@@ -174,6 +174,8 @@ class LLMRouter:
     def __init__(self, llm: Optional[UnifiedLLM] = None):
         self._llm = llm
         self.rules = DEFAULT_RULES.copy()
+        # Backward compatibility alias expected by integration tests.
+        self.routing_rules = self.rules
         self._stats: Dict[str, Dict[str, int]] = {}
 
     async def _get_llm(self) -> UnifiedLLM:

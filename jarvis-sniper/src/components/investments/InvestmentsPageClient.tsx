@@ -40,14 +40,14 @@ export function InvestmentsPageClient() {
         <section className="rounded-xl border border-border-primary bg-bg-secondary p-4">
           <h1 className="text-lg font-display font-semibold text-text-primary">Investments Workspace</h1>
           <p className="mt-1 text-xs text-text-muted">
-            Charts, entries, exits, and take-profit controls for the Jupiter perps sniper workflow.
+            Two clear paths: run the Alvara basket or trade Jupiter perps with guided controls.
           </p>
           <div className="mt-3 rounded-lg border border-border-primary bg-bg-tertiary/45 p-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">Quick start</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">Fast path</h2>
             <ol className="mt-2 list-decimal pl-4 text-xs text-text-muted space-y-1">
-              <li>Pick a surface tab: `Investments Core` for basket ops or `Perps Sniper` for futures execution.</li>
-              <li>If trading perps, set daily limits first, then run arm/disarm controls before submitting orders.</li>
-              <li>Use tiny size and monitor audit events before switching anything to live mode.</li>
+              <li>Choose a tab: `Investments Core` for basket management or `Perps Sniper` for futures.</li>
+              <li>Perps flow: press `Ready Bot`, save limits, then submit entry with take-profit/stop-loss.</li>
+              <li>Basket flow: run cycle, and only use pause if you need to halt execution.</li>
             </ol>
           </div>
           {(!investmentsSurface.enabled || !perpsSurface.enabled) && (

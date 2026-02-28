@@ -125,63 +125,64 @@ export function AlvaraBasketPanel({ forceDisabledReason = null }: AlvaraBasketPa
         </div>
 
         <div className="rounded-xl border border-border-primary bg-bg-secondary p-4">
-          <h3 className="mb-3 text-sm font-semibold text-text-primary">Operator Actions</h3>
+          <h3 className="mb-3 text-sm font-semibold text-text-primary">Simple Controls</h3>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={async () => {
                 if (featureDisabled) return;
-                setActionState('Triggering cycle...');
+                if (killSwitchActive) {
+                  setActionState('Resuming basket engine...');
+                  try {
+                    await deactivateKillSwitch();
+                    setActionState('Basket engine resumed.');
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    setActionState(`Resume failed: ${msg}`);
+                  }
+                  return;
+                }
+
+                setActionState('Running basket cycle...');
                 try {
                   await triggerCycle();
-                  setActionState('Cycle trigger submitted.');
+                  setActionState('Basket cycle submitted.');
                 } catch (err) {
                   const msg = err instanceof Error ? err.message : String(err);
-                  setActionState(`Trigger failed: ${msg}`);
+                  setActionState(`Cycle failed: ${msg}`);
                 }
               }}
               disabled={featureDisabled}
-              className="rounded border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-300"
+              className={`rounded border px-3 py-2 text-xs font-semibold ${
+                killSwitchActive
+                  ? 'border-green-500/40 bg-green-500/10 text-green-300'
+                  : 'border-blue-400/40 bg-blue-500/10 text-blue-300'
+              }`}
             >
-              Trigger Cycle
+              {killSwitchActive ? 'Resume Basket' : 'Run Basket Cycle'}
             </button>
-            <button
-              onClick={async () => {
-                if (featureDisabled) return;
-                setActionState('Activating kill switch...');
-                try {
-                  await activateKillSwitch();
-                  setActionState('Kill switch activated.');
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : String(err);
-                  setActionState(`Activation failed: ${msg}`);
-                }
-              }}
-              disabled={featureDisabled}
-              className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
-            >
-              Activate Kill Switch
-            </button>
-            <button
-              onClick={async () => {
-                if (featureDisabled) return;
-                setActionState('Deactivating kill switch...');
-                try {
-                  await deactivateKillSwitch();
-                  setActionState('Kill switch deactivated.');
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : String(err);
-                  setActionState(`Deactivation failed: ${msg}`);
-                }
-              }}
-              disabled={featureDisabled}
-              className="rounded border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs text-green-300"
-            >
-              Deactivate Kill Switch
-            </button>
+            {!killSwitchActive && (
+              <button
+                onClick={async () => {
+                  if (featureDisabled) return;
+                  setActionState('Pausing basket engine...');
+                  try {
+                    await activateKillSwitch();
+                    setActionState('Kill switch activated.');
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    setActionState(`Pause failed: ${msg}`);
+                  }
+                }}
+                disabled={featureDisabled}
+                className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300"
+              >
+                Pause Basket
+              </button>
+            )}
           </div>
 
           <p className="mt-2 text-xs text-text-muted">
-            Internal beta mode defaults to dry-run service behavior unless explicitly switched.
+            One primary workflow action, one safety stop. Avoid rapid repeat clicks while status refreshes.
           </p>
 
           {actionState && <p className="mt-3 text-xs text-text-muted">{actionState}</p>}

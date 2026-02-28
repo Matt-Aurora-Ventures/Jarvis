@@ -77,19 +77,55 @@ class LatencyStats:
     p99_ms: float
     timestamp: datetime
 
+    @property
+    def p50(self) -> float:
+        return self.p50_ms
+
+    @property
+    def p75(self) -> float:
+        return self.p75_ms
+
+    @property
+    def p90(self) -> float:
+        return self.p90_ms
+
+    @property
+    def p95(self) -> float:
+        return self.p95_ms
+
+    @property
+    def p99(self) -> float:
+        return self.p99_ms
+
 
 @dataclass
 class AlertThreshold:
     """Alert threshold configuration"""
     name: str
-    component: str
-    metric: str  # "error_rate" or "latency_p95"
-    threshold: float
+    component: str = ""
+    metric: str = ""  # "error_rate" or "latency_p95"
+    threshold: float = 0.0
+    warning: Optional[float] = None
+    critical: Optional[float] = None
     duration_seconds: float = 60.0
     severity: str = "warning"
     callback: Optional[Callable] = None
     triggered: bool = False
     triggered_at: Optional[float] = None
+
+    def __post_init__(self):
+        if self.warning is None and self.threshold:
+            self.warning = self.threshold
+        if self.critical is None and self.warning is not None:
+            self.critical = self.warning
+
+    def evaluate(self, value: float) -> str:
+        """Evaluate a value against warning/critical thresholds."""
+        if self.critical is not None and value >= self.critical:
+            return "critical"
+        if self.warning is not None and value >= self.warning:
+            return "warning"
+        return "ok"
 
 
 # =============================================================================
@@ -103,8 +139,17 @@ class SlidingWindow:
         self.window_seconds = window_seconds
         self._data: Deque[RequestMetric] = deque()
 
-    def add(self, metric: RequestMetric):
+    def add(self, metric: Any):
         """Add a metric to the window"""
+        if not isinstance(metric, RequestMetric):
+            metric = RequestMetric(
+                timestamp=time.time(),
+                component="unknown",
+                endpoint="value",
+                latency_ms=float(metric),
+                success=True,
+            )
+
         self._data.append(metric)
         self._cleanup()
 
@@ -118,6 +163,11 @@ class SlidingWindow:
         """Get all metrics in window"""
         self._cleanup()
         return list(self._data)
+
+    def get_values(self) -> List[float]:
+        """Legacy helper: return raw latency values."""
+        self._cleanup()
+        return [metric.latency_ms for metric in self._data]
 
     def count(self) -> int:
         """Get count of metrics"""
@@ -324,7 +374,7 @@ class MetricsCollector:
         self,
         component: str,
         endpoint: str,
-        latency_ms: float,
+        latency_ms: float = 0.0,
         success: bool = True,
         error_type: str = None,
         metadata: Dict[str, Any] = None,
@@ -367,6 +417,20 @@ class MetricsCollector:
 
         # Check thresholds
         self._check_thresholds(component)
+
+    def record_latency(
+        self,
+        component: str,
+        endpoint: str,
+        latency_ms: float,
+    ):
+        """Legacy helper for latency-only tracking."""
+        self.record_request(
+            component=component,
+            endpoint=endpoint,
+            latency_ms=latency_ms,
+            success=True,
+        )
 
     def record_error(
         self,
@@ -449,6 +513,14 @@ class MetricsCollector:
             for component in self._sliding_windows.keys()
         }
 
+    def get_error_rate_stats(
+        self,
+        component: str,
+        window_seconds: int = 300,
+    ) -> ErrorRateStats:
+        """Backward-compatible alias for get_error_rate."""
+        return self.get_error_rate(component, window_seconds)
+
     # =========================================================================
     # LATENCY PERCENTILES
     # =========================================================================
@@ -497,6 +569,14 @@ class MetricsCollector:
             component: self.get_latency_percentiles(component, window_seconds)
             for component in self._latency_calculators.keys()
         }
+
+    def get_latency_stats(
+        self,
+        component: str,
+        window_seconds: int = 300,
+    ) -> LatencyStats:
+        """Backward-compatible alias for get_latency_percentiles."""
+        return self.get_latency_percentiles(component, window_seconds)
 
     # =========================================================================
     # ALERT THRESHOLDS
@@ -828,3 +908,11 @@ def track_request(component: str, endpoint: str = None):
 
         return wrapper
     return decorator
+
+
+def format_prometheus_metrics(metrics: Dict[str, Any]) -> str:
+    """Format a metric dictionary as Prometheus text exposition."""
+    lines = []
+    for key, value in metrics.items():
+        lines.append(f"{key} {value}")
+    return "\n".join(lines) + ("\n" if lines else "")

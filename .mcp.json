@@ -137,6 +137,18 @@
             ],
             "type": "stdio"
         },
+        "hostinger-api": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "hostinger-api-mcp"
+            ],
+            "env": {
+                "DEBUG": "false",
+                "API_TOKEN": "ujqd3QL6BMCARTRpNwwwNJGqmTZ6CJRpyhWb0w5Iad6daa92"
+            },
+            "type": "stdio"
+        },
         "supermemory": {
             "command": "npx",
             "args": [

@@ -1,5 +1,5 @@
 {
-  "text": "\ud83d\udd34 *CONFIRM SELL ALL*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\nYou are about to sell *2 positions*\n\n*Positions:*\n\n\ud83d\udfe2 TEST: +23.4%\n\ud83d\udd34 MOON: -10.0%\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n\u26a0\ufe0f This will close ALL positions!",
+  "text": "\ud83d\udd34 *CONFIRM SELL ALL*\n====================\n\nYou are about to sell *2 positions*\n\n*Positions:*\n\n{green} TEST: +23.4%\n{red} MOON: -10.0%\n\n====================\n\n\u26a0\ufe0f This will close ALL positions!",
   "parse_mode": "Markdown",
   "keyboard": [
     [
@@ -12,6 +12,12 @@
       {
         "text": "\u2716\ufe0f Cancel",
         "callback_data": "demo:quick_trade"
+      }
+    ],
+    [
+      {
+        "text": "\u21a9\ufe0f Previous Menu",
+        "callback_data": "demo:nav_back"
       }
     ]
   ]

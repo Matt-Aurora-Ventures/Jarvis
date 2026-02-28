@@ -128,7 +128,7 @@ JARVIS is an autonomous trading assistant built on a microservices-inspired arch
 **Port:** 8000 (default)
 
 **Middleware Stack:**
-```python
+```text
 FastAPI Application
   ├─ CORS Middleware
   ├─ Rate Limiting Middleware (Redis)

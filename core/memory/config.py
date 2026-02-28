@@ -35,6 +35,11 @@ class MemoryConfig:
         return self.memory_root / self.db_name
 
     @property
+    def memory_dir(self) -> Path:
+        """Legacy alias used by older integrations/tests."""
+        return self.memory_root
+
+    @property
     def daily_logs_dir(self) -> Path:
         """Directory for daily session logs."""
         return self.memory_root / "memory"

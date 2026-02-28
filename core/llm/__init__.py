@@ -75,10 +75,24 @@ from .cost_tracker import (
     UsageRecord,
     UsageStats,
     BudgetAlert,
-    MODEL_PRICING,
+    MODEL_PRICING as _RAW_MODEL_PRICING,
     get_cost_tracker,
     track_llm_cost,
 )
+
+# Expose pricing in a dict shape expected by integration tests:
+# {model: {"input": <usd_per_1m>, "output": <usd_per_1m>}}
+MODEL_PRICING = {
+    model: (
+        {"input": float(prices[0]), "output": float(prices[1])}
+        if isinstance(prices, (tuple, list))
+        else {
+            "input": float(prices.get("input", 0.0)),
+            "output": float(prices.get("output", 0.0)),
+        }
+    )
+    for model, prices in _RAW_MODEL_PRICING.items()
+}
 
 __all__ = [
     # Structured outputs

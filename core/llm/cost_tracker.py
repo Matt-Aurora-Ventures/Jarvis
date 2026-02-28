@@ -162,6 +162,9 @@ class LLMCostTracker:
 
         # Budget alerts
         self._alerts: Dict[str, BudgetAlert] = {}
+        self.daily_budget: Optional[float] = None
+        self.weekly_budget: Optional[float] = None
+        self.monthly_budget: Optional[float] = None
 
         # Runtime stats
         self._session_stats = UsageStats()
@@ -285,7 +288,7 @@ class LLMCostTracker:
 
     def record_usage(
         self,
-        provider: str,
+        provider: Any,
         model: str,
         input_tokens: int,
         output_tokens: int,
@@ -311,7 +314,11 @@ class LLMCostTracker:
             UsageRecord
         """
         # Normalize provider
-        provider = PROVIDER_ALIASES.get(provider.lower(), provider.lower())
+        if isinstance(provider, Enum):
+            provider_name = str(provider.value)
+        else:
+            provider_name = str(provider)
+        provider = PROVIDER_ALIASES.get(provider_name.lower(), provider_name.lower())
 
         # Calculate cost
         cost = self.calculate_cost(model, input_tokens, output_tokens) if success else 0.0
@@ -440,6 +447,35 @@ class LLMCostTracker:
         """Remove a budget alert"""
         if name in self._alerts:
             del self._alerts[name]
+
+    def set_budget(
+        self,
+        daily_limit: Optional[float] = None,
+        monthly_limit: Optional[float] = None,
+        weekly_limit: Optional[float] = None,
+    ) -> None:
+        """
+        Backward-compatible budget setter used by integration tests.
+
+        Args:
+            daily_limit: Daily USD cap
+            monthly_limit: Monthly USD cap
+            weekly_limit: Weekly USD cap
+        """
+        self.daily_budget = daily_limit
+        self.monthly_budget = monthly_limit
+        self.weekly_budget = weekly_limit
+
+        # Clear previous auto-generated budget alerts.
+        for alert_name in ("budget_daily", "budget_weekly", "budget_monthly"):
+            self.remove_budget_alert(alert_name)
+
+        if daily_limit is not None:
+            self.add_budget_alert("budget_daily", float(daily_limit), period="daily")
+        if weekly_limit is not None:
+            self.add_budget_alert("budget_weekly", float(weekly_limit), period="weekly")
+        if monthly_limit is not None:
+            self.add_budget_alert("budget_monthly", float(monthly_limit), period="monthly")
 
     def _check_alerts(self, record: UsageRecord):
         """Check budget alerts"""

@@ -398,7 +398,7 @@ python -m bots.treasury.wallet setup
    ```
 
 2. **Job not running**:
-   ```python
+   ```text
    # Check if job is registered
    from tg_bot.bot import create_application
    app = create_application()
@@ -407,7 +407,7 @@ python -m bots.treasury.wallet setup
    ```
 
 3. **Price hasn't reached target**:
-   ```python
+   ```text
    pos = user_data["positions"][0]
    print(f"Entry: ${pos['entry_price']}")
    print(f"Current: ${pos['current_price']}")

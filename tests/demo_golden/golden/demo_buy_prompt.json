@@ -13,6 +13,12 @@
         "text": "\u25c0\ufe0f Cancel",
         "callback_data": "demo:main"
       }
+    ],
+    [
+      {
+        "text": "\u21a9\ufe0f Previous Menu",
+        "callback_data": "demo:nav_back"
+      }
     ]
   ]
 }

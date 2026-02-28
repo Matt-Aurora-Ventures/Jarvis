@@ -103,6 +103,23 @@ class TestRunCommandSafe:
 
         assert result["returncode"] == 0
 
+    def test_missing_watchdog_dependency_does_not_block_execution(self):
+        """Should still run command if watchdog import fails (e.g., missing psutil)."""
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _import_with_missing_watchdog(name, *args, **kwargs):
+            if name == "core.command_watchdog":
+                raise ModuleNotFoundError("No module named 'psutil'")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_import_with_missing_watchdog):
+            result = run_command_safe("echo watchdog-fallback", skip_validation=True)
+
+        assert result["returncode"] == 0
+        assert "watchdog-fallback" in result["stdout"]
+
     def test_blocked_command_structure(self):
         """Blocked command should return proper structure."""
         # Mock the validator to block the command

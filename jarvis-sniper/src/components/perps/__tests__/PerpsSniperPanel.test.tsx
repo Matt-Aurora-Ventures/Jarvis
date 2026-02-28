@@ -31,14 +31,12 @@ vi.mock('@/components/perps/usePerpsData', () => ({
 }));
 
 describe('PerpsSniperPanel controls', () => {
-  it('renders runner and arm controls', async () => {
+  it('renders simplified guided controls', async () => {
     const { PerpsSniperPanel } = await import('@/components/perps/PerpsSniperPanel');
     const html = renderToStaticMarkup(<PerpsSniperPanel />);
 
-    expect(html).toContain('Start Runner');
-    expect(html).toContain('Stop Runner');
-    expect(html).toContain('Prepare Arm');
-    expect(html).toContain('Confirm Arm');
-    expect(html).toContain('Disarm');
+    expect(html).toContain('Ready Bot');
+    expect(html).toContain('Emergency Stop');
+    expect(html).toContain('Save Risk Limits');
   });
 });

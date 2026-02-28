@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 ROOT = Path(__file__).resolve().parents[1]
 PROMPTS_PATH = ROOT / "data" / "prompts.json"
 PROMPT_STATS_PATH = ROOT / "data" / "prompt_stats.jsonl"
+# Treat this legacy module as a package root so `core.prompts.*` imports work.
+__path__ = [str(Path(__file__).with_name("prompts"))]
 
 
 @dataclass

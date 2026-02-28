@@ -121,7 +121,8 @@ class TradingOperationsMixin:
         # Check for existing positions in this token
         existing_in_token = [p for p in open_positions if p.token_mint == token_mint]
         if existing_in_token:
-            if not ALLOW_STACKING:
+            allow_stacking = getattr(self, "ALLOW_STACKING", ALLOW_STACKING)
+            if not allow_stacking:
                 self._log_audit("OPEN_POSITION_REJECTED", {
                     "token": token_symbol,
                     "reason": "duplicate",

@@ -1,165 +1,284 @@
-"""
-Inter-bot Message Queue for ClawdBots.
+"""JSON-backed inter-bot message queue."""
 
-Simple async message queue for bot-to-bot communication.
-Uses SQLite for persistence so messages survive restarts.
-"""
+from __future__ import annotations
 
 import json
-import logging
-import sqlite3
 import threading
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
+from uuid import uuid4
 
-logger = logging.getLogger(__name__)
 
-import os
-
-DATA_DIR = Path(os.environ.get("CLAWDBOT_DATA_DIR", "/root/clawdbots/data"))
-QUEUE_DB = DATA_DIR / "message_queue.db"
+DEFAULT_QUEUE_FILE = "/tmp/clawdbot-message-queue.json"
+_global_queue: Optional["MessageQueue"] = None
 
 
 class Priority(IntEnum):
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
-    URGENT = 3
+    LOW = 1
+    NORMAL = 2
+    HIGH = 3
+    URGENT = 4
+
+
+@dataclass
+class Message:
+    id: str
+    from_bot: str
+    to_bot: str
+    content: str
+    priority: Priority = Priority.NORMAL
+    acknowledged: bool = False
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    acknowledged_at: Optional[str] = None
+    topic: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "from_bot": self.from_bot,
+            "to_bot": self.to_bot,
+            "content": self.content,
+            "priority": int(self.priority),
+            "acknowledged": self.acknowledged,
+            "timestamp": self.timestamp,
+            "acknowledged_at": self.acknowledged_at,
+            "topic": self.topic,
+        }
+
+    @staticmethod
+    def from_dict(data: Dict[str, object]) -> "Message":
+        return Message(
+            id=str(data["id"]),
+            from_bot=str(data["from_bot"]),
+            to_bot=str(data["to_bot"]),
+            content=str(data["content"]),
+            priority=Priority(int(data.get("priority", Priority.NORMAL.value))),
+            acknowledged=bool(data.get("acknowledged", False)),
+            timestamp=str(data.get("timestamp", datetime.now(timezone.utc).isoformat())),
+            acknowledged_at=(str(data["acknowledged_at"]) if data.get("acknowledged_at") else None),
+            topic=(str(data["topic"]) if data.get("topic") else None),
+        )
+
+
+@dataclass
+class QueueStats:
+    total_messages: int
+    pending_count: int
+    acknowledged_count: int
+    messages_by_recipient: Dict[str, int] = field(default_factory=dict)
+    messages_by_priority: Dict[Priority, int] = field(default_factory=dict)
 
 
 class MessageQueue:
-    """SQLite-backed inter-bot message queue."""
-
-    def __init__(self, bot_name: str, db_path: Optional[str] = None):
-        self.bot_name = bot_name
-        self.db_path = db_path or str(QUEUE_DB)
+    def __init__(self, queue_file: str = DEFAULT_QUEUE_FILE):
+        self.queue_file = str(queue_file)
         self._lock = threading.Lock()
-        self._init_db()
+        self._init_storage()
 
-    def _init_db(self):
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
-            conn.execute("""CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT NOT NULL,
-                recipient TEXT NOT NULL,
-                channel TEXT NOT NULL DEFAULT 'default',
-                payload TEXT NOT NULL,
-                priority INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL,
-                expires_at TEXT,
-                read_at TEXT,
-                acked_at TEXT
-            )""")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_recipient ON messages(recipient, read_at)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_channel ON messages(channel)")
+    def _init_storage(self) -> None:
+        path = Path(self.queue_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            self._write_payload({"messages": [], "subscriptions": {}})
+            return
+        try:
+            payload = self._read_payload()
+            payload.setdefault("messages", [])
+            payload.setdefault("subscriptions", {})
+            self._write_payload(payload)
+        except Exception:
+            self._write_payload({"messages": [], "subscriptions": {}})
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _read_payload(self) -> Dict[str, object]:
+        with open(self.queue_file, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+        if not isinstance(raw, dict):
+            return {"messages": [], "subscriptions": {}}
+        return raw
 
-    def send(
+    def _write_payload(self, payload: Dict[str, object]) -> None:
+        with open(self.queue_file, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+
+    def send_message(
         self,
-        recipient: str,
-        payload: Any,
-        channel: str = "default",
+        from_bot: str,
+        to_bot: str,
+        message: str,
         priority: Priority = Priority.NORMAL,
-        ttl_seconds: int = 0,
-    ) -> int:
-        """Send a message to another bot. Returns message ID."""
-        now = datetime.utcnow().isoformat()
-        expires = None
-        if ttl_seconds > 0:
-            expires = (datetime.utcnow() + timedelta(seconds=ttl_seconds)).isoformat()
-
+        topic: Optional[str] = None,
+    ) -> str:
+        msg_id = f"msg_{uuid4().hex[:10]}"
+        msg = Message(
+            id=msg_id,
+            from_bot=from_bot,
+            to_bot=to_bot,
+            content=message,
+            priority=priority,
+            topic=topic,
+        )
         with self._lock:
-            with self._connect() as conn:
-                cur = conn.execute(
-                    """INSERT INTO messages (sender, recipient, channel, payload, priority, created_at, expires_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (self.bot_name, recipient, channel, json.dumps(payload), int(priority), now, expires),
-                )
-                msg_id = cur.lastrowid
-        logger.debug(f"[MQ] {self.bot_name} -> {recipient} (ch={channel}, id={msg_id})")
+            payload = self._read_payload()
+            messages = payload.get("messages", [])
+            if not isinstance(messages, list):
+                messages = []
+            messages.append(msg.to_dict())
+            payload["messages"] = messages
+            self._write_payload(payload)
         return msg_id
 
-    def receive(
+    def receive_messages(self, bot: str, limit: int = 50) -> List[Message]:
+        if limit <= 0:
+            return []
+        payload = self._read_payload()
+        messages_raw = payload.get("messages", [])
+        if not isinstance(messages_raw, list):
+            return []
+        messages = [Message.from_dict(item) for item in messages_raw]
+        filtered = [m for m in messages if m.to_bot == bot and not m.acknowledged]
+        filtered.sort(key=lambda m: (-int(m.priority), m.timestamp))
+        return filtered[:limit]
+
+    def acknowledge_message(self, message_id: str) -> bool:
+        with self._lock:
+            payload = self._read_payload()
+            messages_raw = payload.get("messages", [])
+            if not isinstance(messages_raw, list):
+                return False
+            updated = False
+            now = datetime.now(timezone.utc).isoformat()
+            for idx, item in enumerate(messages_raw):
+                msg = Message.from_dict(item)
+                if msg.id == message_id:
+                    msg.acknowledged = True
+                    msg.acknowledged_at = now
+                    messages_raw[idx] = msg.to_dict()
+                    updated = True
+                    break
+            if updated:
+                payload["messages"] = messages_raw
+                self._write_payload(payload)
+            return updated
+
+    def get_queue_stats(self) -> QueueStats:
+        payload = self._read_payload()
+        messages_raw = payload.get("messages", [])
+        if not isinstance(messages_raw, list):
+            messages_raw = []
+        messages = [Message.from_dict(item) for item in messages_raw]
+        by_recipient: Dict[str, int] = {}
+        by_priority: Dict[Priority, int] = {p: 0 for p in Priority}
+        pending = 0
+        acknowledged = 0
+        for msg in messages:
+            by_recipient[msg.to_bot] = by_recipient.get(msg.to_bot, 0) + 1
+            by_priority[msg.priority] = by_priority.get(msg.priority, 0) + 1
+            if msg.acknowledged:
+                acknowledged += 1
+            else:
+                pending += 1
+        return QueueStats(
+            total_messages=len(messages),
+            pending_count=pending,
+            acknowledged_count=acknowledged,
+            messages_by_recipient=by_recipient,
+            messages_by_priority=by_priority,
+        )
+
+    # Topic subscriptions
+    def subscribe_topic(self, bot: str, topic: str) -> bool:
+        with self._lock:
+            payload = self._read_payload()
+            subs = payload.get("subscriptions", {})
+            if not isinstance(subs, dict):
+                subs = {}
+            recipients = list(subs.get(topic, []))
+            if bot not in recipients:
+                recipients.append(bot)
+            subs[topic] = sorted(set(recipients))
+            payload["subscriptions"] = subs
+            self._write_payload(payload)
+        return True
+
+    def unsubscribe_topic(self, bot: str, topic: str) -> bool:
+        with self._lock:
+            payload = self._read_payload()
+            subs = payload.get("subscriptions", {})
+            if not isinstance(subs, dict):
+                subs = {}
+            recipients = [name for name in list(subs.get(topic, [])) if name != bot]
+            subs[topic] = recipients
+            payload["subscriptions"] = subs
+            self._write_payload(payload)
+        return True
+
+    def get_topic_subscribers(self, topic: str) -> List[str]:
+        payload = self._read_payload()
+        subs = payload.get("subscriptions", {})
+        if not isinstance(subs, dict):
+            return []
+        return list(subs.get(topic, []))
+
+    def get_bot_subscriptions(self, bot: str) -> List[str]:
+        payload = self._read_payload()
+        subs = payload.get("subscriptions", {})
+        if not isinstance(subs, dict):
+            return []
+        topics = [topic for topic, members in subs.items() if bot in list(members)]
+        return sorted(topics)
+
+    def publish_topic(
         self,
-        channel: str = "default",
-        limit: int = 10,
-        mark_read: bool = True,
-    ) -> List[Dict[str, Any]]:
-        """Receive unread messages for this bot. Oldest first, highest priority first."""
-        now = datetime.utcnow().isoformat()
-        with self._connect() as conn:
-            rows = conn.execute(
-                """SELECT * FROM messages
-                WHERE recipient = ? AND channel = ? AND read_at IS NULL
-                AND (expires_at IS NULL OR expires_at > ?)
-                ORDER BY priority DESC, created_at ASC
-                LIMIT ?""",
-                (self.bot_name, channel, now, limit),
-            ).fetchall()
-
-            messages = [dict(r) for r in rows]
-            for m in messages:
-                m["payload"] = json.loads(m["payload"])
-
-            if mark_read and messages:
-                ids = [m["id"] for m in messages]
-                placeholders = ",".join("?" * len(ids))
-                conn.execute(
-                    f"UPDATE messages SET read_at = ? WHERE id IN ({placeholders})",
-                    [now] + ids,
+        topic: str,
+        message: str,
+        from_bot: str = "system",
+        priority: Priority = Priority.NORMAL,
+    ) -> List[str]:
+        recipients = self.get_topic_subscribers(topic)
+        message_ids: List[str] = []
+        for recipient in recipients:
+            message_ids.append(
+                self.send_message(
+                    from_bot=from_bot,
+                    to_bot=recipient,
+                    message=message,
+                    priority=priority,
+                    topic=topic,
                 )
-        return messages
+            )
+        return message_ids
 
-    def peek(self, channel: str = "default") -> int:
-        """Count unread messages without consuming them."""
-        now = datetime.utcnow().isoformat()
-        with self._connect() as conn:
-            row = conn.execute(
-                """SELECT COUNT(*) FROM messages
-                WHERE recipient = ? AND channel = ? AND read_at IS NULL
-                AND (expires_at IS NULL OR expires_at > ?)""",
-                (self.bot_name, channel, now),
-            ).fetchone()
-        return row[0]
 
-    def ack(self, message_id: int):
-        """Acknowledge a message (mark as processed)."""
-        now = datetime.utcnow().isoformat()
-        with self._lock:
-            with self._connect() as conn:
-                conn.execute("UPDATE messages SET acked_at = ? WHERE id = ?", (now, message_id))
+def _get_global_queue() -> MessageQueue:
+    global _global_queue
+    if _global_queue is None or _global_queue.queue_file != DEFAULT_QUEUE_FILE:
+        _global_queue = MessageQueue(queue_file=DEFAULT_QUEUE_FILE)
+    return _global_queue
 
-    def broadcast(self, payload: Any, channel: str = "broadcast", recipients: Optional[List[str]] = None):
-        """Send to multiple bots. If recipients is None, sends to all known bots."""
-        targets = recipients or ["matt", "jarvis", "friday"]
-        targets = [t for t in targets if t != self.bot_name]
-        for t in targets:
-            self.send(t, payload, channel=channel)
 
-    def cleanup(self, days: int = 7) -> int:
-        """Remove old acknowledged/expired messages."""
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
-        with self._lock:
-            with self._connect() as conn:
-                cur = conn.execute(
-                    "DELETE FROM messages WHERE (acked_at IS NOT NULL AND acked_at < ?) OR (expires_at IS NOT NULL AND expires_at < ?)",
-                    (cutoff, datetime.utcnow().isoformat()),
-                )
-                return cur.rowcount
+def send_message(from_bot: str, to_bot: str, message: str, priority: Priority = Priority.NORMAL) -> str:
+    return _get_global_queue().send_message(from_bot, to_bot, message, priority=priority)
 
-    def stats(self) -> Dict[str, Any]:
-        """Queue statistics for this bot."""
-        with self._connect() as conn:
-            total = conn.execute("SELECT COUNT(*) FROM messages WHERE recipient = ?", (self.bot_name,)).fetchone()[0]
-            unread = conn.execute(
-                "SELECT COUNT(*) FROM messages WHERE recipient = ? AND read_at IS NULL", (self.bot_name,)
-            ).fetchone()[0]
-            sent = conn.execute("SELECT COUNT(*) FROM messages WHERE sender = ?", (self.bot_name,)).fetchone()[0]
-        return {"bot": self.bot_name, "total_received": total, "unread": unread, "total_sent": sent}
+
+def receive_messages(bot: str, limit: int = 50) -> List[Message]:
+    return _get_global_queue().receive_messages(bot, limit=limit)
+
+
+def acknowledge_message(message_id: str) -> bool:
+    return _get_global_queue().acknowledge_message(message_id)
+
+
+def get_queue_stats() -> QueueStats:
+    return _get_global_queue().get_queue_stats()
+
+
+def subscribe_topic(bot: str, topic: str) -> bool:
+    return _get_global_queue().subscribe_topic(bot, topic)
+
+
+def publish_topic(topic: str, message: str, priority: Priority = Priority.NORMAL) -> List[str]:
+    return _get_global_queue().publish_topic(topic, message, priority=priority)
+

@@ -54,18 +54,25 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
   const [slPct, setSlPct] = useState('5');
   const [orderState, setOrderState] = useState<string>('');
   const [operatorState, setOperatorState] = useState<string>('');
-  const [armChallenge, setArmChallenge] = useState<string>('');
   const [maxTradesPerDay, setMaxTradesPerDay] = useState<number>(40);
   const [dailyLossLimitUsd, setDailyLossLimitUsd] = useState<number>(500);
 
   const featureDisabled = Boolean(forceDisabledReason);
   const canTrade = !featureDisabled && isArmed && isLive;
+  const tradeNotionalUsd = Math.max(0, collateral) * Math.max(1, leverage);
 
   const runnerStatusLabel = useMemo(() => {
     if (!status) return 'Unknown';
     if (status.runner_healthy) return 'Runner Online';
     return 'Runner Offline';
   }, [status]);
+
+  const readinessLabel = useMemo(() => {
+    if (!status?.runner_healthy) return 'Runner offline - click Ready Bot first.';
+    if (!isArmed) return 'Runner online - arm sequence pending.';
+    if (!isLive) return 'Armed - switch mode to LIVE before entry.';
+    return 'Ready for live order entry.';
+  }, [status?.runner_healthy, isArmed, isLive]);
 
   useEffect(() => {
     const incomingMaxTrades = Number(status?.daily?.max_trades_per_day);
@@ -113,126 +120,69 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
 
       <div className="rounded-xl border border-border-primary bg-bg-secondary p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <h3 className="text-sm font-semibold text-text-primary">Perps Operator Controls</h3>
+          <h3 className="text-sm font-semibold text-text-primary">Perps Quick Controls</h3>
           <div className="text-xs text-text-muted">
             Arm Stage: <span className="font-semibold text-text-primary">{String(status?.arm?.stage || 'disarmed').toUpperCase()}</span>
           </div>
         </div>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-5">
+        <p className="mt-2 text-xs text-text-muted">{readinessLabel}</p>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
           <button
             type="button"
             disabled={featureDisabled}
-            className="rounded border border-border-primary bg-bg-tertiary px-2 py-2 text-xs text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-accent-neon/50 bg-accent-neon/12 px-3 py-2 text-xs font-semibold text-accent-neon disabled:cursor-not-allowed disabled:opacity-50"
             onClick={async () => {
               if (featureDisabled) return;
-              setOperatorState('Starting runner...');
+              setOperatorState('Running readiness flow...');
               try {
-                const body = await startRunner();
-                setOperatorState(String(body.message || 'Runner start request sent.'));
+                if (!status?.runner_healthy) {
+                  const body = await startRunner();
+                  setOperatorState(String(body.message || 'Runner start request sent.'));
+                  return;
+                }
+
+                if (!isArmed) {
+                  const prep = await armPrepare();
+                  const challenge = String(prep.challenge || '');
+                  await armConfirm(challenge);
+                  setOperatorState('Arm sequence confirmed. Move to LIVE mode when ready.');
+                  return;
+                }
+
+                await refreshStatus();
+                setOperatorState('Bot already ready. Status refreshed.');
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
-                setOperatorState(`Runner start failed: ${msg}`);
+                setOperatorState(`Ready flow failed: ${msg}`);
               }
             }}
           >
-            Start Runner
+            Ready Bot
           </button>
           <button
             type="button"
             disabled={featureDisabled}
-            className="rounded border border-border-primary bg-bg-tertiary px-2 py-2 text-xs text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={async () => {
               if (featureDisabled) return;
-              setOperatorState('Stopping runner...');
+              setOperatorState('Sending emergency stop...');
               try {
-                const body = await stopRunner();
-                setOperatorState(String(body.message || 'Runner stop request sent.'));
+                await disarm('web_ui_emergency_stop');
+                await stopRunner();
+                setOperatorState('Emergency stop sent (disarm + runner stop).');
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
-                setOperatorState(`Runner stop failed: ${msg}`);
+                setOperatorState(`Emergency stop failed: ${msg}`);
               }
             }}
           >
-            Stop Runner
-          </button>
-          <button
-            type="button"
-            disabled={featureDisabled}
-            className="rounded border border-accent-neon/40 bg-accent-neon/10 px-2 py-2 text-xs text-accent-neon disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={async () => {
-              if (featureDisabled) return;
-              setOperatorState('Preparing arm challenge...');
-              try {
-                const body = await armPrepare();
-                const nextChallenge = String(body.challenge || '');
-                setArmChallenge(nextChallenge);
-                setOperatorState(nextChallenge ? 'Arm challenge prepared. Confirm arm to activate live mode.' : 'Arm prepare request accepted.');
-              } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                setOperatorState(`Arm prepare failed: ${msg}`);
-              }
-            }}
-          >
-            Prepare Arm
-          </button>
-          <button
-            type="button"
-            disabled={featureDisabled || !armChallenge.trim()}
-            className="rounded border border-blue-400/50 bg-blue-500/10 px-2 py-2 text-xs text-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={async () => {
-              if (featureDisabled) return;
-              const challenge = armChallenge.trim();
-              if (!challenge) {
-                setOperatorState('Prepare arm first to get a valid challenge.');
-                return;
-              }
-              setOperatorState('Confirming arm...');
-              try {
-                const body = await armConfirm(challenge);
-                setArmChallenge('');
-                const reason = body.reason ? ` (${String(body.reason)})` : '';
-                setOperatorState(`Arm confirm accepted${reason}.`);
-              } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                setOperatorState(`Arm confirm failed: ${msg}`);
-              }
-            }}
-          >
-            Confirm Arm
-          </button>
-          <button
-            type="button"
-            disabled={featureDisabled}
-            className="rounded border border-red-500/40 bg-red-500/10 px-2 py-2 text-xs text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={async () => {
-              if (featureDisabled) return;
-              setOperatorState('Disarming...');
-              try {
-                await disarm();
-                setArmChallenge('');
-                setOperatorState('Disarm completed.');
-              } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                setOperatorState(`Disarm failed: ${msg}`);
-              }
-            }}
-          >
-            Disarm
+            Emergency Stop
           </button>
         </div>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-[1.4fr_1fr_1fr_auto]">
-          <label className="flex flex-col gap-1 text-xs text-text-muted">
-            Arm Challenge
-            <input
-              value={armChallenge}
-              onChange={(e) => setArmChallenge(e.target.value)}
-              placeholder="prepare to receive challenge"
-              disabled={featureDisabled}
-              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
-            />
-          </label>
+        <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto]">
           <label className="flex flex-col gap-1 text-xs text-text-muted">
             Max Trades / Day
             <input
@@ -271,7 +221,7 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
               }
             }}
           >
-            Apply Limits
+            Save Risk Limits
           </button>
         </div>
 
@@ -347,16 +297,34 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
               />
             </label>
             <label className="flex flex-col gap-1 text-text-muted">
-              Leverage
+              Leverage ({leverage}x)
               <input
                 value={leverage}
                 onChange={(e) => setLeverage(Number(e.target.value || 1))}
-                type="number"
+                type="range"
                 min={1}
-                max={250}
+                max={20}
+                step={1}
                 disabled={featureDisabled}
-                className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-text-primary"
+                className="rounded border border-border-primary bg-bg-tertiary px-2 py-1"
               />
+              <div className="mt-1 flex flex-wrap gap-1">
+                {[2, 3, 5, 10].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setLeverage(preset)}
+                    disabled={featureDisabled}
+                    className={`rounded border px-2 py-0.5 text-[11px] ${
+                      leverage === preset
+                        ? 'border-accent-neon/40 bg-accent-neon/10 text-accent-neon'
+                        : 'border-border-primary bg-bg-tertiary text-text-muted'
+                    }`}
+                  >
+                    {preset}x
+                  </button>
+                ))}
+              </div>
             </label>
             <label className="flex flex-col gap-1 text-text-muted">
               Take Profit %
@@ -379,6 +347,9 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
               />
             </label>
           </div>
+          <p className="mt-2 text-xs text-text-muted">
+            Estimated notional: <span className="text-text-primary">${tradeNotionalUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+          </p>
 
           <button
             type="button"
@@ -410,7 +381,7 @@ export function PerpsSniperPanel({ forceDisabledReason = null }: PerpsSniperPane
             <p className="mt-2 text-xs text-accent-warning">
               {featureDisabled
                 ? 'Perps action controls are disabled for this runtime.'
-                : 'Live order entry requires mode=LIVE and arm stage=ARMED.'}
+                : 'Tap Ready Bot, then switch runtime mode to LIVE to unlock order entry.'}
             </p>
           )}
 

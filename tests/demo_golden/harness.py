@@ -62,6 +62,12 @@ def _normalize_text(text: str) -> str:
     return cleaned
 
 
+def _normalize_parse_mode(parse_mode: Any) -> Optional[str]:
+    if parse_mode is None:
+        return None
+    return str(parse_mode)
+
+
 def _build_mock_update(user_id: int = 111111111, username: str = "admin") -> Update:
     user = Mock(spec=User)
     user.id = user_id
@@ -217,7 +223,7 @@ def _extract_last_reply(message: Message) -> GoldenResult:
 
     args, kwargs = call
     text = args[0] if args else kwargs.get("text", "")
-    parse_mode = kwargs.get("parse_mode")
+    parse_mode = _normalize_parse_mode(kwargs.get("parse_mode"))
     keyboard = _serialize_keyboard(kwargs.get("reply_markup"))
     return GoldenResult(text=_normalize_text(text), parse_mode=parse_mode, keyboard=keyboard)
 
@@ -228,7 +234,7 @@ def _extract_last_edit(message: Message) -> GoldenResult:
     call = message.edit_text.call_args_list[-1]
     args, kwargs = call
     text = args[0] if args else kwargs.get("text", "")
-    parse_mode = kwargs.get("parse_mode")
+    parse_mode = _normalize_parse_mode(kwargs.get("parse_mode"))
     keyboard = _serialize_keyboard(kwargs.get("reply_markup"))
     return GoldenResult(text=_normalize_text(text), parse_mode=parse_mode, keyboard=keyboard)
 

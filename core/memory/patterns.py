@@ -103,14 +103,15 @@ def generate_weekly_summary() -> Dict[str, Any]:
         cursor.execute(
             """
             SELECT
-                em.entity_name,
+                e.name as entity_name,
                 COUNT(*) as mention_count,
                 SUM(CASE WHEN f.content LIKE '%+%' OR f.content LIKE '%profit%' THEN 1 ELSE 0 END) as wins
             FROM entity_mentions em
+            JOIN entities e ON em.entity_id = e.id
             JOIN facts f ON em.fact_id = f.id
-            WHERE em.entity_type = 'token'
+            WHERE e.type = 'token'
             AND f.timestamp >= ? AND f.timestamp <= ?
-            GROUP BY em.entity_name
+            GROUP BY e.name
             ORDER BY wins DESC
             LIMIT 10
             """,
@@ -133,15 +134,16 @@ def generate_weekly_summary() -> Dict[str, Any]:
         cursor.execute(
             """
             SELECT
-                em.entity_name as strategy,
+                e.name as strategy,
                 COUNT(*) as trades,
                 SUM(CASE WHEN f.content LIKE '%+%' THEN 1 ELSE 0 END) as wins
             FROM entity_mentions em
+            JOIN entities e ON em.entity_id = e.id
             JOIN facts f ON em.fact_id = f.id
-            WHERE em.entity_type = 'strategy'
+            WHERE e.type = 'strategy'
             AND f.source = 'treasury'
             AND f.timestamp >= ? AND f.timestamp <= ?
-            GROUP BY em.entity_name
+            GROUP BY e.name
             ORDER BY wins DESC
             """,
             (start_dt, end_dt)

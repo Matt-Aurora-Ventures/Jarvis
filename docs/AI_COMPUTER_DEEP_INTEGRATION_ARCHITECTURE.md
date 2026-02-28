@@ -31,7 +31,7 @@ What Needs to Expand:
 ```
 
 #### 1.2 Bot Architecture (VPS-First)
-```python
+```text
 # Current: Bots run on local computer (requires computer on)
 # Target: Bots run on VPS 24/7
 
@@ -52,7 +52,7 @@ Local Computer Role:
 ```
 
 #### 1.3 State Synchronization
-```python
+```text
 # VPS maintains authoritative state
 # Local syncs FROM VPS (not TO VPS)
 
@@ -99,7 +99,7 @@ schtasks /create /tn "Jarvis-Backup" /tr "powershell C:\Scripts\backup_state.ps1
 ```
 
 #### 2.3 Windows Service Deployment ⏳ IMPLEMENT
-```python
+```text
 # Convert supervisor.py to Windows Service
 # Runs even when no user logged in
 
@@ -127,7 +127,7 @@ class JarvisService(win32service.ServiceFramework):
 ```
 
 #### 2.4 Browser Automation (Chromium CDP) ✅ AVAILABLE
-```python
+```text
 # Current: telegram_bot uses Chromium CDP
 # Expand to:
 - Web scraping 24/7
@@ -144,7 +144,6 @@ class JarvisService(win32service.ServiceFramework):
 **Solution**: Hybrid VPS + Wake-on-LAN + Cloud compute
 
 #### 3.1 Wake-on-LAN Setup ⏳ IMPLEMENT
-```python
 # VPS can wake local computer when needed
 
 Requirements:
@@ -169,7 +168,7 @@ ssh_exec('72.61.7.126', 'python scripts/gpu_task.py')
 ```
 
 #### 3.2 Cloud Compute Failover ⏳ IMPLEMENT
-```python
+```text
 # When local computer unavailable, use cloud GPU
 
 Priority Order:
@@ -221,7 +220,7 @@ analyze_token.delay('0x123...')
 **Solution**: Persistent memory + context restoration
 
 #### 4.1 PostgreSQL Persistent Memory ✅ IMPLEMENTED
-```python
+```text
 # Already using:
 - archival_memory table (learnings)
 - sessions table (cross-terminal coordination)
@@ -296,7 +295,7 @@ Expand To:
 ```
 
 #### 5.2 Network Share Access ⏳ IMPLEMENT
-```python
+```text
 # AI can access files on other computers
 
 # Mount network shares on local computer
@@ -307,7 +306,7 @@ sshfs user@local-computer:/ /mnt/local-computer
 ```
 
 #### 5.3 Cloud Storage Integration ⏳ IMPLEMENT
-```python
+```text
 # AI can sync files to/from cloud
 
 Integrations:
@@ -386,7 +385,7 @@ app.Telegram.Edit.type_keys("Message from AI{ENTER}")
 **Solution**: Already mostly solved, expand capabilities
 
 #### 7.1 Current Capabilities ✅
-```python
+```text
 - WebFetch (fetch web pages)
 - WebSearch (search the web)
 - GitHub integration (repos, PRs, issues)
@@ -540,7 +539,7 @@ requests.post('https://maker.ifttt.com/trigger/event/with/key/YOUR_KEY')
 ## SECURITY CONSIDERATIONS
 
 ### Safe Automation Boundaries
-```python
+```text
 # Always require confirmation for:
 - Deleting files/folders
 - Git destructive commands (push --force, reset --hard)
@@ -570,7 +569,7 @@ audit_log = {
 ```
 
 ### Kill Switches
-```python
+```text
 # Multiple ways to stop AI
 
 1. Environment variable: JARVIS_AI_ENABLED=false

@@ -128,7 +128,9 @@ def _extract_symbol(query: str) -> Optional[str]:
     # Prefer tokens following BUY/SELL/HOLD actions.
     action_match = re.search(r"\b(?:BUY|SELL|HOLD)\s+([A-Z0-9]{3,10})\b", query_upper)
     if action_match:
-        return action_match.group(1)
+        candidate = action_match.group(1)
+        if not candidate.isdigit():
+            return candidate
 
     # Try to find any uppercase token pattern (3-10 chars), skipping common words.
     stopwords = {
@@ -140,6 +142,8 @@ def _extract_symbol(query: str) -> Optional[str]:
     }
     token_candidates = re.findall(r"\b[A-Z0-9]{3,10}\b", query_upper)
     for token in token_candidates:
+        if token.isdigit():
+            continue
         if token not in stopwords:
             return token
 

@@ -33,7 +33,8 @@ class SentimentAnalysis(BaseModel):
     """Sentiment analysis result."""
     sentiment: str  # positive, negative, neutral
     score: float  # -1 to 1
-    reasoning: str
+    reasoning: str = ""
+    keywords: List[str] = []
 
 
 class TradingSignal(BaseModel):

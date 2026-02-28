@@ -103,7 +103,7 @@ btc_price = 95432.50  # TODO: Get real data
 
 ## 🔴 FROM SECURITY AUDIT (CODEX)
 
-### 16-42: See [GSD_COMPREHENSIVE_AUDIT_JAN_31.md](GSD_COMPREHENSIVE_AUDIT_JAN_31.md)
+### 16-42: See [COMPREHENSIVE_AUDIT_FIXES_JAN_2026.md](COMPREHENSIVE_AUDIT_FIXES_JAN_2026.md)
 **27 Critical/High Priority Security Tasks:**
 - Exposed secrets (treasury keypair, Redis dump, Telegram token) - PARTIALLY DONE
 - SQL injection risks (f-string queries)

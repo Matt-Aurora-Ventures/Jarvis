@@ -4,6 +4,7 @@ Provides real-time price, volume, trade, and order book updates via WebSocket
 """
 
 import asyncio
+import inspect
 import logging
 import os
 import time
@@ -25,6 +26,50 @@ def _is_test_mode() -> bool:
         or os.getenv("TEST_MODE") == "true"
         or "PYTEST_CURRENT_TEST" in os.environ
     )
+
+
+def _patch_testclient_receive_json_timeout() -> None:
+    """
+    Backward-compatible timeout kwarg for older Starlette WebSocketTestSession.
+
+    Some integration tests call `receive_json(timeout=...)` but older
+    Starlette signatures do not accept `timeout`. This patch is safe no-op
+    outside test runs.
+    """
+    try:
+        from starlette.testclient import WebSocketTestSession
+
+        sig = inspect.signature(WebSocketTestSession.receive_json)
+        if "timeout" in sig.parameters:
+            return
+
+        original = WebSocketTestSession.receive_json
+
+        def receive_json_compat(self, mode: str = "text", timeout: Optional[float] = None):
+            if timeout is None:
+                return original(self, mode=mode)
+
+            import json as _json
+            import anyio
+
+            async def _recv_with_timeout(channel, timeout_seconds: float):
+                with anyio.fail_after(timeout_seconds):
+                    return await channel.receive()
+
+            message = self.portal.call(_recv_with_timeout, self._send_rx, float(timeout))
+            self._raise_on_close(message)
+            if mode == "text":
+                text = message["text"]
+            else:
+                text = message["bytes"].decode("utf-8")
+            return _json.loads(text)
+
+        WebSocketTestSession.receive_json = receive_json_compat
+    except Exception:
+        return
+
+
+_patch_testclient_receive_json_timeout()
 
 
 # =============================================================================
@@ -567,8 +612,14 @@ async def market_data_websocket_endpoint(websocket: WebSocket, client_id: str):
 
             elif msg_type == "subscribe":
                 tokens = data.get("tokens", [])
+                if not isinstance(tokens, list) or len(tokens) == 0:
+                    # Ignore malformed subscribe payloads to keep socket healthy.
+                    continue
                 data_types_raw = data.get("data_types", [])
-                data_types = [MarketDataType(dt) for dt in data_types_raw]
+                try:
+                    data_types = [MarketDataType(dt) for dt in data_types_raw]
+                except Exception:
+                    continue
                 await manager.subscribe(client_id, tokens, data_types)
 
             elif msg_type == "unsubscribe":

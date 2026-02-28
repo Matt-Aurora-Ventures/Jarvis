@@ -201,10 +201,37 @@ class HealthMonitor:
     # CHECK REGISTRATION
     # =========================================================================
 
-    def register_check(self, check: HealthCheck):
-        """Register a health check"""
-        self._checks[check.name] = check
-        logger.debug(f"Registered health check: {check.name}")
+    def register_check(
+        self,
+        check: Any,
+        check_func: Optional[Callable] = None,
+        timeout_seconds: float = 5.0,
+        critical: bool = True,
+        interval_seconds: float = 60.0,
+    ):
+        """Register a health check (HealthCheck object or legacy args)."""
+        if isinstance(check, HealthCheck):
+            health_check = check
+        elif isinstance(check, str) and callable(check_func):
+            health_check = HealthCheck(
+                name=check,
+                check_func=check_func,
+                timeout_seconds=timeout_seconds,
+                critical=critical,
+                interval_seconds=interval_seconds,
+            )
+        else:
+            raise TypeError(
+                "register_check expects HealthCheck or (name: str, check_func: callable)"
+            )
+
+        self._checks[health_check.name] = health_check
+        logger.debug(f"Registered health check: {health_check.name}")
+
+    @property
+    def checks(self) -> Dict[str, HealthCheck]:
+        """Expose registered checks for legacy integrations/tests."""
+        return self._checks
 
     def unregister_check(self, name: str):
         """Unregister a health check"""

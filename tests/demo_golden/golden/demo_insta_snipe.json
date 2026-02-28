@@ -18,8 +18,8 @@
         "callback_data": "demo:snipe_exec:35f4d5cab4:0.5"
       },
       {
-        "text": "\u26a1 1 SOL",
-        "callback_data": "demo:snipe_exec:35f4d5cab4:1"
+        "text": "\u26a1 1.0 SOL",
+        "callback_data": "demo:snipe_exec:35f4d5cab4:1.0"
       }
     ],
     [
@@ -36,6 +36,12 @@
       {
         "text": "\u25c0\ufe0f Back",
         "callback_data": "demo:main"
+      }
+    ],
+    [
+      {
+        "text": "\u21a9\ufe0f Previous Menu",
+        "callback_data": "demo:nav_back"
       }
     ]
   ]

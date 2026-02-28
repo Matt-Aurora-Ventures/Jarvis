@@ -23,11 +23,15 @@ from starlette.middleware.gzip import GZipMiddleware
 from api.errors import make_error_response
 from api.versioning import APIVersionMiddleware, create_version_info_router
 
-# Performance: Use orjson for faster JSON responses
+# Performance: Use orjson for faster JSON responses when available.
+# NOTE: ORJSONResponse can still import even if orjson itself is missing, then
+# it fails at render time. Gate on importing orjson directly first.
 try:
+    import orjson  # noqa: F401
     from fastapi.responses import ORJSONResponse
+
     DEFAULT_RESPONSE_CLASS = ORJSONResponse
-except ImportError:
+except Exception:
     DEFAULT_RESPONSE_CLASS = JSONResponse
 
 # Import new middleware

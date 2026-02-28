@@ -56,6 +56,17 @@ class CacheEntry:
         return time.time() > self.expires_at
 
 
+@dataclass
+class TTLCacheStats:
+    """Lightweight stats container for TTLCache integration tests."""
+    hits: int = 0
+    misses: int = 0
+    writes: int = 0
+    deletes: int = 0
+    evictions: int = 0
+    entries: int = 0
+
+
 class InMemoryCache:
     """
     Fast in-memory cache with max size eviction.
@@ -276,6 +287,7 @@ class TTLCache:
         self.max_size = max_size
         self._cache: Dict[str, CacheEntry] = {}
         self._lock = threading.RLock()
+        self._stats = TTLCacheStats()
 
     def get(self, key: str) -> Optional[Any]:
         """Get a value from the cache."""
@@ -283,24 +295,39 @@ class TTLCache:
             entry = self._cache.get(key)
 
             if entry is None:
+                self._stats.misses += 1
                 return None
 
             if entry.is_expired:
                 del self._cache[key]
+                self._stats.misses += 1
                 return None
 
             entry.access_count += 1
             entry.last_accessed = time.time()
+            self._stats.hits += 1
             return entry.value
 
-    def set(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl_seconds: Optional[int] = None,
+        ttl: Optional[int] = None,
+    ) -> None:
         """Set a value with TTL."""
-        effective_ttl = ttl_seconds if ttl_seconds is not None else self.default_ttl
+        # Backward compatibility: accept both ttl_seconds and ttl keyword names.
+        effective_ttl = (
+            ttl
+            if ttl is not None
+            else ttl_seconds if ttl_seconds is not None else self.default_ttl
+        )
 
         with self._lock:
             # Evict if at capacity
             while len(self._cache) >= self.max_size:
-                self._evict_oldest()
+                if self._evict_oldest():
+                    self._stats.evictions += 1
 
             now = time.time()
             entry = CacheEntry(
@@ -311,12 +338,14 @@ class TTLCache:
                 last_accessed=now,
             )
             self._cache[key] = entry
+            self._stats.writes += 1
 
     def delete(self, key: str) -> bool:
         """Delete a key from the cache."""
         with self._lock:
             if key in self._cache:
                 del self._cache[key]
+                self._stats.deletes += 1
                 return True
             return False
 
@@ -342,7 +371,7 @@ class TTLCache:
 
         return count
 
-    def _evict_oldest(self) -> None:
+    def _evict_oldest(self) -> bool:
         """Evict the oldest entry."""
         if self._cache:
             oldest_key = min(
@@ -350,10 +379,25 @@ class TTLCache:
                 key=lambda k: self._cache[k].created_at
             )
             del self._cache[oldest_key]
+            return True
+        return False
 
     def size(self) -> int:
         """Get number of entries."""
         return len(self._cache)
+
+    def get_stats(self) -> TTLCacheStats:
+        """Return cache statistics in a test-friendly shape."""
+        with self._lock:
+            self._stats.entries = len(self._cache)
+            return TTLCacheStats(
+                hits=self._stats.hits,
+                misses=self._stats.misses,
+                writes=self._stats.writes,
+                deletes=self._stats.deletes,
+                evictions=self._stats.evictions,
+                entries=self._stats.entries,
+            )
 
 
 class LRUCache:

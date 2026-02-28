@@ -268,6 +268,8 @@ class RiskManager:
         limits: RiskLimits = None,
         db_path: str = None,
         enable_cooldown: bool = True,
+        max_position_pct: Optional[float] = None,
+        **_compat_kwargs: Any,
     ):
         """
         Initialize risk manager.
@@ -278,6 +280,10 @@ class RiskManager:
             enable_cooldown: Enable cooldown system integration
         """
         self.limits = limits or RiskLimits()
+        if max_position_pct is not None:
+            self.limits.max_position_size_pct = float(max_position_pct)
+        # Legacy alias expected by older integrations/tests.
+        self.max_position_pct = self.limits.max_position_size_pct
         self.circuit_breaker = CircuitBreaker()
 
         self.db_path = db_path or str(

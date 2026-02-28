@@ -53,6 +53,12 @@
         "text": "\u25c0\ufe0f Back",
         "callback_data": "demo:main"
       }
+    ],
+    [
+      {
+        "text": "\u21a9\ufe0f Previous Menu",
+        "callback_data": "demo:nav_back"
+      }
     ]
   ]
 }

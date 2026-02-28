@@ -19,6 +19,35 @@ from .patterns import detect_contradictions
 logger = logging.getLogger(__name__)
 
 
+def _ensure_memory_markdown(config) -> Path:
+    """
+    Ensure memory.md exists for both current and legacy paths.
+
+    Returns:
+        Path to the primary memory.md location.
+    """
+    primary_path = config.daily_logs_dir / "memory.md"
+    primary_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not primary_path.exists():
+        with open(primary_path, "w", encoding="utf-8") as f:
+            f.write("# Jarvis Memory\n\n")
+            f.write("This file contains daily reflections and synthesized insights.\n\n")
+            f.write("---\n\n")
+
+    # Legacy compatibility for integrations expecting ~/.lifeos/memory/memory.md
+    legacy_root = getattr(config, "memory_dir", config.memory_root)
+    legacy_path = legacy_root / "memory.md"
+    if legacy_path != primary_path:
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copyfile(primary_path, legacy_path)
+        except OSError:
+            logger.debug("Failed to sync legacy memory.md path", exc_info=True)
+
+    return primary_path
+
+
 def reflect_daily() -> Dict[str, Any]:
     """
     Run daily reflection to synthesize yesterday's facts into durable knowledge.
@@ -96,6 +125,9 @@ def reflect_daily() -> Dict[str, Any]:
             "entities": entities,
         })
 
+    config = get_config()
+    memory_path = _ensure_memory_markdown(config)
+
     # Check if we have facts to process
     if not facts:
         duration = time.time() - start_time
@@ -120,17 +152,6 @@ def reflect_daily() -> Dict[str, Any]:
     synthesis = synthesize_daily_facts(facts)
 
     # Append synthesis to memory.md
-    config = get_config()
-    memory_path = config.daily_logs_dir / "memory.md"
-
-    # Ensure memory.md exists
-    memory_path.parent.mkdir(parents=True, exist_ok=True)
-    if not memory_path.exists():
-        with open(memory_path, "w", encoding="utf-8") as f:
-            f.write("# Jarvis Memory\n\n")
-            f.write("This file contains daily reflections and synthesized insights.\n\n")
-            f.write("---\n\n")
-
     # Append reflection section
     yesterday_date = yesterday_start.strftime("%Y-%m-%d")
     reflection_section = f"\n## Reflection: {yesterday_date}\n\n{synthesis}\n\n"
@@ -138,6 +159,9 @@ def reflect_daily() -> Dict[str, Any]:
 
     with open(memory_path, "a", encoding="utf-8") as f:
         f.write(reflection_section)
+
+    # Keep legacy path in sync for tooling still reading old location.
+    _ensure_memory_markdown(config)
 
     logger.info(f"Appended reflection to {memory_path}")
 
@@ -376,9 +400,9 @@ def evolve_preference_confidence(since_time: datetime) -> Dict[str, Any]:
         with db.get_cursor() as cursor:
             cursor.execute(
                 """
-                SELECT id, confidence, evidence_count, value
+                SELECT id, confidence, evidence_count, preference_value
                 FROM preferences
-                WHERE user_id = ? AND key = ?
+                WHERE user_id = ? AND preference_key = ?
                 """,
                 (user, key)
             )
@@ -391,7 +415,7 @@ def evolve_preference_confidence(since_time: datetime) -> Dict[str, Any]:
         pref_id = pref_row["id"] if hasattr(pref_row, "keys") else pref_row[0]
         old_confidence = pref_row["confidence"] if hasattr(pref_row, "keys") else pref_row[1]
         evidence_count = pref_row["evidence_count"] if hasattr(pref_row, "keys") else pref_row[2]
-        current_value = pref_row["value"] if hasattr(pref_row, "keys") else pref_row[3]
+        current_value = pref_row["preference_value"] if hasattr(pref_row, "keys") else pref_row[3]
 
         # Calculate new confidence
         if action == "confirmed":
@@ -424,8 +448,8 @@ def evolve_preference_confidence(since_time: datetime) -> Dict[str, Any]:
                 cursor.execute(
                     """
                     UPDATE preferences
-                    SET confidence = ?, value = ?, evidence_count = evidence_count + 1, last_updated = ?
-                    WHERE user_id = ? AND key = ?
+                    SET confidence = ?, preference_value = ?, evidence_count = evidence_count + 1, updated_at = ?
+                    WHERE user_id = ? AND preference_key = ?
                     """,
                     (new_confidence, new_value, datetime.utcnow(), user, key)
                 )
@@ -433,8 +457,8 @@ def evolve_preference_confidence(since_time: datetime) -> Dict[str, Any]:
                 cursor.execute(
                     """
                     UPDATE preferences
-                    SET confidence = ?, evidence_count = evidence_count + 1, last_updated = ?
-                    WHERE user_id = ? AND key = ?
+                    SET confidence = ?, evidence_count = evidence_count + 1, updated_at = ?
+                    WHERE user_id = ? AND preference_key = ?
                     """,
                     (new_confidence, datetime.utcnow(), user, key)
                 )

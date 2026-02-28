@@ -15,6 +15,7 @@ from core.timeout_config import get_command_timeout, get_timeout
 from core.command_validator import validate_before_run
 
 logger = logging.getLogger(__name__)
+_WATCHDOG_IMPORT_WARNED = False
 
 
 class TimeoutError(Exception):
@@ -25,6 +26,22 @@ class TimeoutError(Exception):
 class CommandExecutionError(Exception):
     """Raised when a command fails to execute."""
     pass
+
+
+def _get_watchdog_or_none():
+    """Best-effort watchdog loader. Commands should still run without it."""
+    global _WATCHDOG_IMPORT_WARNED
+    try:
+        from core.command_watchdog import get_watchdog
+        return get_watchdog()
+    except Exception as exc:  # noqa: BLE001 - optional dependency path
+        if not _WATCHDOG_IMPORT_WARNED:
+            logger.warning(
+                "Command watchdog unavailable; continuing without watchdog protection: %s",
+                exc,
+            )
+            _WATCHDOG_IMPORT_WARNED = True
+        return None
 
 
 def _kill_process_tree(pid: int):
@@ -124,25 +141,45 @@ def run_command_safe(
         "timeout": timeout,
     }
     
-    # Register with watchdog
-    from core.command_watchdog import get_watchdog
-    watchdog = get_watchdog()
+    # Register with watchdog when available (optional dependency)
+    watchdog = _get_watchdog_or_none()
     started_at = __import__('time').time()
+    executed_command = command
     
     try:
-        proc = subprocess.Popen(
-            command,
-            shell=shell,
-            stdout=subprocess.PIPE if capture_output else None,
-            stderr=subprocess.PIPE if capture_output else None,
-            text=True,
-            cwd=cwd,
-            env=env,
-        )
+        try:
+            proc = subprocess.Popen(
+                command,
+                shell=shell,
+                stdout=subprocess.PIPE if capture_output else None,
+                stderr=subprocess.PIPE if capture_output else None,
+                text=True,
+                cwd=cwd,
+                env=env,
+            )
+        except FileNotFoundError:
+            # Windows shell built-ins like `echo` fail with list-based execution.
+            if os.name != "nt" or shell or not isinstance(command, list):
+                raise
+            executed_command = subprocess.list2cmdline([str(part) for part in command])
+            proc = subprocess.Popen(
+                executed_command,
+                shell=True,
+                stdout=subprocess.PIPE if capture_output else None,
+                stderr=subprocess.PIPE if capture_output else None,
+                text=True,
+                cwd=cwd,
+                env=env,
+            )
         
         # Register with watchdog for monitoring
-        cmd_str = command if isinstance(command, str) else " ".join(command)
-        watchdog.register(proc.pid, cmd_str, timeout, started_at)
+        cmd_str = (
+            executed_command
+            if isinstance(executed_command, str)
+            else " ".join(str(part) for part in executed_command)
+        )
+        if watchdog is not None:
+            watchdog.register(proc.pid, cmd_str, timeout, started_at)
         
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
@@ -170,7 +207,8 @@ def run_command_safe(
         
         finally:
             # Always unregister from watchdog
-            watchdog.unregister(proc.pid)
+            if watchdog is not None:
+                watchdog.unregister(proc.pid)
             if result["timed_out"]:
                 result["stderr"] += (
                     f"\n[TIMEOUT] Command exceeded {timeout}s limit and was killed"
@@ -179,6 +217,8 @@ def run_command_safe(
                     raise TimeoutError(f"Command timed out after {timeout}s: {command}")
                 
     except Exception as e:
+        if isinstance(e, TimeoutError):
+            raise
         logger.error(f"Command execution error: {e}")
         result["stderr"] = str(e)
         if check:
@@ -258,8 +298,8 @@ async def run_command_async(
             
             # Kill process
             try:
-                proc.kill()
-                await proc.wait()
+                _kill_process_tree(proc.pid)
+                await asyncio.wait_for(proc.wait(), timeout=1)
             except Exception:  # noqa: BLE001 - intentional catch-all
                 pass
             
@@ -269,6 +309,8 @@ async def run_command_async(
                 raise TimeoutError(f"Command timed out after {timeout}s: {command}")
                 
     except Exception as e:
+        if isinstance(e, TimeoutError):
+            raise
         logger.error(f"Async command execution error: {e}")
         result["stderr"] = str(e)
         if check:

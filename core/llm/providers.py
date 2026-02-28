@@ -545,6 +545,10 @@ class UnifiedLLM:
         configs.sort(key=lambda x: x[1])
         self._fallback_order = [p for p, _ in configs]
 
+    def _get_provider(self, provider: LLMProvider) -> Optional[BaseLLMProvider]:
+        """Return a provider instance by enum (legacy compatibility hook)."""
+        return self.providers.get(provider)
+
     async def generate(
         self,
         prompt: Union[str, List[Message]],
@@ -579,7 +583,9 @@ class UnifiedLLM:
         last_error = None
         for prov in providers_to_try:
             try:
-                llm = self.providers[prov]
+                llm = self._get_provider(prov)
+                if llm is None:
+                    continue
                 response = await llm.generate(messages, **kwargs)
 
                 # Cache successful response
@@ -609,10 +615,10 @@ class UnifiedLLM:
         providers_to_try = [provider] if provider else self._fallback_order
 
         for prov in providers_to_try:
-            if prov not in self.providers:
+            llm = self._get_provider(prov)
+            if llm is None:
                 continue
             try:
-                llm = self.providers[prov]
                 async for chunk in llm.stream(messages, **kwargs):
                     yield chunk
                 return
