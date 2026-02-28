@@ -85,6 +85,18 @@ echo   -h, --help      Show this help
 goto :eof
 
 :main
+REM Load Claude OAuth token automatically when not explicitly set
+if "%ANTHROPIC_AUTH_TOKEN%"=="" (
+    if exist "%USERPROFILE%\.claude\.credentials.json" (
+        for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "$ErrorActionPreference='SilentlyContinue';$p=Join-Path $env:USERPROFILE '.claude\\.credentials.json';if(Test-Path $p){$j=Get-Content $p -Raw | ConvertFrom-Json;$t=[string]$j.claudeAiOauth.accessToken;if(-not [string]::IsNullOrWhiteSpace($t)){Write-Output $t.Trim()}}"`) do (
+            set "ANTHROPIC_AUTH_TOKEN=%%T"
+        )
+        if not "%ANTHROPIC_AUTH_TOKEN%"=="" (
+            echo Loaded ANTHROPIC_AUTH_TOKEN from %%USERPROFILE%%\.claude\.credentials.json
+        )
+    )
+)
+
 REM Check for .env file
 if not exist "%PROJECT_DIR%\.env" (
     echo Warning: .env file not found.

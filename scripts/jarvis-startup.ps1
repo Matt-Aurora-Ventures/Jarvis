@@ -144,6 +144,44 @@ function Ensure-EnvFile {
     }
 }
 
+function Set-ClaudeAuthTokenFromLocalCredentials {
+    if (-not [string]::IsNullOrWhiteSpace($env:ANTHROPIC_AUTH_TOKEN)) {
+        Write-Log "ANTHROPIC_AUTH_TOKEN already set in environment"
+        return
+    }
+
+    $credPath = Join-Path $env:USERPROFILE ".claude\.credentials.json"
+    if (-not (Test-Path $credPath)) {
+        Write-Log "Claude credentials not found at $credPath"
+        return
+    }
+
+    try {
+        $raw = Get-Content -Path $credPath -Raw
+        $json = $raw | ConvertFrom-Json
+        $token = [string]$json.claudeAiOauth.accessToken
+        if ([string]::IsNullOrWhiteSpace($token)) {
+            Write-Log "Claude credentials present but access token is empty" "WARN"
+            return
+        }
+
+        $expiresAtRaw = [string]$json.claudeAiOauth.expiresAt
+        $expiresAtMs = 0L
+        if ([int64]::TryParse($expiresAtRaw, [ref]$expiresAtMs) -and $expiresAtMs -gt 0) {
+            $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+            if ($nowMs -ge $expiresAtMs) {
+                Write-Log "Claude access token is expired; run 'claude setup-token' to refresh" "WARN"
+                return
+            }
+        }
+
+        $env:ANTHROPIC_AUTH_TOKEN = $token.Trim()
+        Write-Log "Loaded ANTHROPIC_AUTH_TOKEN from local Claude credentials"
+    } catch {
+        Write-Log "Failed to load Claude credentials: $($_.Exception.Message)" "WARN"
+    }
+}
+
 function Wait-For-Health {
     param([int]$TimeoutSeconds)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -176,6 +214,7 @@ if (-not (Ensure-DockerRunning)) {
 }
 
 Ensure-EnvFile
+Set-ClaudeAuthTokenFromLocalCredentials
 New-Item -ItemType Directory -Force -Path (Join-Path $projectDir "secrets") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $projectDir "data") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $projectDir "logs") | Out-Null

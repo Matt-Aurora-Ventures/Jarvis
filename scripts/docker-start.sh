@@ -26,6 +26,51 @@ NC='\033[0m' # No Color
 # Default profiles
 PROFILES=""
 
+load_claude_auth_token() {
+    if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        return
+    fi
+
+    local cred_path="${HOME}/.claude/.credentials.json"
+    if [ ! -f "$cred_path" ]; then
+        return
+    fi
+
+    local token
+    token="$(python3 - "$cred_path" <<'PY'
+import json
+import sys
+import time
+
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    oauth = data.get("claudeAiOauth") or {}
+    token = str(oauth.get("accessToken") or "").strip()
+    if not token:
+        raise SystemExit(0)
+
+    expires_at = oauth.get("expiresAt")
+    if expires_at is not None:
+        expires_ms = int(str(expires_at))
+        if int(time.time() * 1000) >= expires_ms:
+            raise SystemExit(0)
+
+    print(token)
+except Exception:
+    raise SystemExit(0)
+PY
+)"
+
+    if [ -n "$token" ]; then
+        export ANTHROPIC_AUTH_TOKEN="$token"
+        echo -e "${GREEN}Loaded ANTHROPIC_AUTH_TOKEN from ~/.claude/.credentials.json${NC}"
+    else
+        echo -e "${YELLOW}Claude credentials found but no valid token; run 'claude setup-token'.${NC}"
+    fi
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -89,6 +134,8 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+load_claude_auth_token
 
 # Check for .env file
 if [ ! -f "$PROJECT_DIR/.env" ]; then
