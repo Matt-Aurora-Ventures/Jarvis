@@ -21,12 +21,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: jarvis-sniper/package-lock.json
 
       - name: Install dependencies
         working-directory: jarvis-sniper
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
 
       - name: Prewarm dataset manifests
         working-directory: jarvis-sniper
