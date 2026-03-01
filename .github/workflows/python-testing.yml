@@ -26,12 +26,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-asyncio pytest-xprocess pydantic requests python-telegram-bot
           # Runtime deps for phase 1-4 strategy and backtesting validations.
-          pip install torch pandas optuna web3 solders anchorpy
+          pip install torch pandas optuna web3 solders anchorpy pyarrow
 
       - name: Run Python Algorithm and Runner Tests
         run: |
           PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest \
-            -p pytest_asyncio \
+            -p pytest_asyncio.plugin \
             core/open_claw/tests \
             core/backtest/data_ingestion/tests \
             bots/tradfi_sniper/tests \
