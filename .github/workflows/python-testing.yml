@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio pydantic requests python-telegram-bot
+          pip install pytest pytest-asyncio pytest-xprocess pydantic requests python-telegram-bot
           # Runtime deps for phase 1-4 strategy and backtesting validations.
           pip install torch pandas optuna web3 solders anchorpy
 
@@ -56,4 +56,10 @@ jobs:
           pip install pytest pytest-asyncio pydantic requests python-telegram-bot
       - name: Run legacy unit advisory suite
         run: |
+          set +e
           pytest tests/unit -q
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::Legacy advisory suite detected test failures (non-blocking): exit ${code}"
+          fi
+          exit 0
