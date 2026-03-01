@@ -30,6 +30,7 @@ jobs:
 
       - name: Prewarm dataset manifests
         working-directory: jarvis-sniper
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         env:
           PREWARM_CANONICAL_ORIGIN: https://jarvislife.cloud
           PREWARM_FAMILIES: memecoin,bags,bluechip,xstock,prestock,index
