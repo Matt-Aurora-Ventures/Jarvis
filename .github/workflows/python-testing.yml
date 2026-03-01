@@ -30,12 +30,14 @@ jobs:
 
       - name: Run Python Algorithm and Runner Tests
         run: |
-          pytest core/open_claw/tests \
-                 core/backtest/data_ingestion/tests \
-                 bots/tradfi_sniper/tests \
-                 core/intel/tests \
-                 tests/backtesting \
-                 -q
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest \
+            -p pytest_asyncio \
+            core/open_claw/tests \
+            core/backtest/data_ingestion/tests \
+            bots/tradfi_sniper/tests \
+            core/intel/tests \
+            tests/backtesting \
+            -q
 
   python-legacy-unit-advisory:
     runs-on: ubuntu-latest
