@@ -45,19 +45,20 @@ jobs:
         run: npm test
 
       - name: Auth (GCP Service Account)
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV != '' }}
         run: |
           mkdir -p "$HOME/.gcp"
-          printf '%s' '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV }}' > "$HOME/.gcp/firebase-sa.json"
+          FIREBASE_SERVICE_ACCOUNT='${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV }}'
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "deploy_enabled=false" >> "$GITHUB_ENV"
+            echo "::warning::FIREBASE_SERVICE_ACCOUNT_KR8TIV is not configured; skipping deploy/smoke steps."
+            exit 0
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$HOME/.gcp/firebase-sa.json"
+          echo "deploy_enabled=true" >> "$GITHUB_ENV"
         shell: bash
 
-      - name: Skip deploy (missing Firebase service account secret)
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV == '' }}
-        run: |
-          echo "::warning::FIREBASE_SERVICE_ACCOUNT_KR8TIV is not configured; skipping deploy/smoke steps."
-
       - name: Deploy
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV != '' }}
+        if: ${{ env.deploy_enabled == 'true' }}
         working-directory: jarvis-sniper
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.home }}/.gcp/firebase-sa.json
@@ -67,7 +68,7 @@ jobs:
           npx firebase-tools deploy --only hosting --project "$FIREBASE_PROJECT" --non-interactive
 
       - name: Smoke Check
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KR8TIV != '' }}
+        if: ${{ env.deploy_enabled == 'true' }}
         run: |
           curl -fsS "https://${CANONICAL_HOST}/api/health" > /dev/null
           curl -fsS "https://${CANONICAL_HOST}/api/version" > /dev/null
