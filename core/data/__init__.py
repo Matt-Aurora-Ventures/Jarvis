@@ -45,6 +45,11 @@ from core.data.liquidation_analyzer import (
     LiquidationAnalyzer, get_liquidation_analyzer, LiquidationLevel, LiquidationAnalysis
 )
 
+# Asset universe registry (survivorship-bias-free backtesting)
+from core.data.asset_registry import (
+    AssetRegistry, get_asset_registry, AssetRecord, AssetClass, AssetStatus
+)
+
 __all__ = [
     "DataAnonymizer",
     "get_anonymizer",
@@ -94,4 +99,10 @@ __all__ = [
     "get_liquidation_analyzer",
     "LiquidationLevel",
     "LiquidationAnalysis",
+    # Asset universe registry
+    "AssetRegistry",
+    "get_asset_registry",
+    "AssetRecord",
+    "AssetClass",
+    "AssetStatus",
 ]

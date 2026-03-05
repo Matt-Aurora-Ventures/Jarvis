@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
@@ -17,6 +18,9 @@ from aiohttp import ClientTimeout
 
 from bots.treasury.jupiter import JupiterClient, SwapQuote, SwapResult
 from core import dexscreener
+from core.data.asset_registry import AssetClass
+from core.events.market_events import EventUrgency, MarketEvent, MarketEventType
+from core.events.trading_pipeline import PipelineAction, TradingPipeline
 from core.trading.bags_client import get_bags_client as get_bags_api_client
 from core.wallet_service import WalletService
 from tg_bot.services.token_data import KNOWN_TOKENS
@@ -40,6 +44,15 @@ except Exception:
 logger = logging.getLogger(__name__)
 
 TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+DEFAULT_SOL_PRICE_USD = 150.0
+DEFAULT_POOL_LIQUIDITY_USD = {
+    AssetClass.NATIVE_SOLANA: 5_000_000.0,
+    AssetClass.XSTOCK: 200_000.0,
+    AssetClass.BAGS_BONDING_CURVE: 30_000.0,
+    AssetClass.BAGS_GRADUATED: 100_000.0,
+    AssetClass.MEMECOIN: 100_000.0,
+    AssetClass.STABLECOIN: 5_000_000.0,
+}
 
 
 @dataclass
@@ -126,6 +139,7 @@ class PublicTradingService:
             "SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com"
         )
         self.jupiter = JupiterClient(self.rpc_url)
+        self.execution_pipeline = TradingPipeline()
         self._session: Optional[aiohttp.ClientSession] = None
 
     def load_keypair(self, encrypted_key: str, password: str) -> "Keypair":
@@ -318,6 +332,15 @@ class PublicTradingService:
             "no",
         )
 
+        gate_result = await self._evaluate_execution_gate(quote)
+        if gate_result.action != PipelineAction.ENTER:
+            reason = gate_result.rejection_reason.value if gate_result.rejection_reason else "unknown"
+            detail = gate_result.rejection_detail or "trade rejected"
+            return SwapResult(
+                success=False,
+                error=f"Execution gate rejected ({reason}): {detail}",
+            )
+
         # Purchases: enforce Bags execution (Bags-only by default).
         if quote.input_mint == self.jupiter.SOL_MINT:
             bags = get_bags_api_client(profile="public")
@@ -360,6 +383,120 @@ class PublicTradingService:
         # Default execution route: Jupiter.
         wallet = UserWalletAdapter(keypair)
         return await self.jupiter.execute_swap(quote, wallet)
+
+    async def _evaluate_execution_gate(self, quote: SwapQuote):
+        """Evaluate a quote with the event-driven execution gate."""
+        event, trade_size_usd = await self._build_market_event(quote)
+        return self.execution_pipeline.evaluate(
+            event,
+            trade_size_usd=trade_size_usd,
+            entry_price=event.current_price,
+            pool_liquidity_usd=event.pool_liquidity_usd,
+        )
+
+    async def _build_market_event(self, quote: SwapQuote) -> Tuple[MarketEvent, float]:
+        """Construct a market event from a swap quote for gate evaluation."""
+        trade_mint = quote.output_mint if quote.input_mint == self.jupiter.SOL_MINT else quote.input_mint
+        symbol = str(
+            quote.quote_response.get("outputSymbol")
+            or quote.quote_response.get("inputSymbol")
+            or trade_mint[:8]
+        ).upper()
+        asset_class = self._infer_asset_class(symbol=symbol, quote=quote)
+        trade_size_usd = await self._estimate_trade_size_usd(quote)
+        current_price = await self._estimate_unit_price_usd(quote, trade_size_usd)
+        pool_liquidity_usd = self._estimate_pool_liquidity_usd(
+            asset_class=asset_class,
+            trade_size_usd=trade_size_usd,
+            price_impact_pct=float(quote.price_impact_pct or 0.0),
+        )
+
+        event_type = MarketEventType.PRICE_BREAKOUT
+        urgency = EventUrgency.FAST
+        if asset_class == AssetClass.BAGS_BONDING_CURVE and quote.input_mint == self.jupiter.SOL_MINT:
+            event_type = MarketEventType.TOKEN_LAUNCH
+            urgency = EventUrgency.IMMEDIATE
+        elif asset_class == AssetClass.XSTOCK:
+            event_type = MarketEventType.ORACLE_UPDATE
+            urgency = EventUrgency.LOW
+
+        return (
+            MarketEvent(
+                event_type=event_type,
+                urgency=urgency,
+                timestamp=datetime.now(timezone.utc),
+                mint_address=trade_mint,
+                symbol=symbol,
+                asset_class=asset_class,
+                current_price=current_price,
+                pool_liquidity_usd=pool_liquidity_usd,
+            ),
+            trade_size_usd,
+        )
+
+    def _infer_asset_class(self, *, symbol: str, quote: SwapQuote) -> AssetClass:
+        """Infer the asset class from the quoted token and route direction."""
+        if quote.input_mint == self.jupiter.SOL_MINT and quote.output_mint == self.jupiter.SOL_MINT:
+            return AssetClass.NATIVE_SOLANA
+
+        if symbol.endswith("X"):
+            return AssetClass.XSTOCK
+
+        if quote.input_mint == self.jupiter.SOL_MINT:
+            return AssetClass.BAGS_BONDING_CURVE
+
+        if quote.output_mint == self.jupiter.SOL_MINT:
+            return AssetClass.MEMECOIN
+
+        return AssetClass.MEMECOIN
+
+    async def _estimate_trade_size_usd(self, quote: SwapQuote) -> float:
+        """Estimate trade notional in USD using the quoted legs."""
+        if quote.input_mint == self.jupiter.SOL_MINT and quote.input_amount_ui:
+            return max(float(quote.input_amount_ui) * DEFAULT_SOL_PRICE_USD, 0.0)
+
+        if quote.output_mint == self.jupiter.SOL_MINT and quote.output_amount_ui:
+            return max(float(quote.output_amount_ui) * DEFAULT_SOL_PRICE_USD, 0.0)
+
+        input_price = await self.jupiter.get_token_price(quote.input_mint)
+        if input_price and quote.input_amount_ui:
+            return max(float(quote.input_amount_ui) * float(input_price), 0.0)
+
+        output_price = await self.jupiter.get_token_price(quote.output_mint)
+        if output_price and quote.output_amount_ui:
+            return max(float(quote.output_amount_ui) * float(output_price), 0.0)
+
+        return 500.0
+
+    async def _estimate_unit_price_usd(self, quote: SwapQuote, trade_size_usd: float) -> float:
+        """Estimate token unit price in USD from the quote legs."""
+        if quote.input_mint == self.jupiter.SOL_MINT and quote.output_amount_ui:
+            return trade_size_usd / float(quote.output_amount_ui)
+
+        if quote.output_mint == self.jupiter.SOL_MINT and quote.input_amount_ui:
+            return trade_size_usd / float(quote.input_amount_ui)
+
+        trade_mint = quote.output_mint if quote.input_mint == self.jupiter.SOL_MINT else quote.input_mint
+        token_price = await self.jupiter.get_token_price(trade_mint)
+        if token_price:
+            return float(token_price)
+
+        return 0.0
+
+    def _estimate_pool_liquidity_usd(
+        self,
+        *,
+        asset_class: AssetClass,
+        trade_size_usd: float,
+        price_impact_pct: float,
+    ) -> float:
+        """Estimate pool liquidity from quote impact, with conservative fallbacks."""
+        if price_impact_pct > 0 and trade_size_usd > 0:
+            estimated = trade_size_usd / (2 * price_impact_pct)
+            if estimated > 0:
+                return estimated
+
+        return DEFAULT_POOL_LIQUIDITY_USD.get(asset_class, 50_000.0)
 
     async def send_sol(
         self,

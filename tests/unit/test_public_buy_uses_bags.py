@@ -53,3 +53,52 @@ async def test_public_execute_swap_uses_bags_for_purchases():
 
     await service.close()
 
+
+@pytest.mark.asyncio
+async def test_public_execute_swap_rejects_when_execution_gate_fails():
+    from core.events.trading_pipeline import PipelineAction, PipelineResult, RejectionReason
+    from core.public_trading_service import PublicTradingService
+    from bots.treasury.jupiter import SwapQuote
+
+    wallet_service = MagicMock()
+    service = PublicTradingService(wallet_service, rpc_url="https://example.invalid")
+
+    service.jupiter.execute_swap = AsyncMock(side_effect=AssertionError("jupiter called"))
+
+    keypair = MagicMock()
+    keypair.pubkey.return_value = "Wallet111111111111111111111111111111111"
+
+    bags = MagicMock(api_key="k", partner_key="p")
+    bags.swap = AsyncMock(side_effect=AssertionError("bags called"))
+
+    quote = SwapQuote(
+        input_mint=service.jupiter.SOL_MINT,
+        output_mint="TokenMint111111111111111111111111111111111",
+        input_amount=5_000_000_000,
+        output_amount=1,
+        input_amount_ui=5.0,
+        output_amount_ui=123.0,
+        price_impact_pct=0.20,
+        slippage_bps=100,
+        fees_usd=0.0,
+        route_plan=[],
+        quote_response={},
+    )
+
+    rejected = PipelineResult(
+        action=PipelineAction.SKIP,
+        rejection_reason=RejectionReason.COST_TOO_HIGH,
+        rejection_detail="RT cost exceeds safety threshold",
+    )
+
+    service.execution_pipeline.evaluate = MagicMock(return_value=rejected)
+
+    with patch("core.public_trading_service.get_bags_api_client", return_value=bags):
+        result = await service.execute_swap(quote, keypair)
+
+    assert result.success is False
+    assert "Execution gate rejected" in result.error
+    service.execution_pipeline.evaluate.assert_called_once()
+
+    await service.close()
+

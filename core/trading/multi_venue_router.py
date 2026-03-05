@@ -6,14 +6,26 @@ Prompt #37: Smart routing between Bags.fm and Jupiter for best execution
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime
 import aiohttp
 from aiohttp import ClientTimeout
 
+from core.data.asset_registry import AssetClass
+from core.events.market_events import EventUrgency, MarketEvent, MarketEventType
+from core.events.trading_pipeline import PipelineAction, TradingPipeline
+
 logger = logging.getLogger(__name__)
+SOL_MINT = "So11111111111111111111111111111111111111112"
+DEFAULT_SOL_PRICE_USD = 150.0
+DEFAULT_POOL_LIQUIDITY_USD = {
+    AssetClass.NATIVE_SOLANA: 5_000_000.0,
+    AssetClass.BAGS_BONDING_CURVE: 30_000.0,
+    AssetClass.BAGS_GRADUATED: 100_000.0,
+    AssetClass.MEMECOIN: 100_000.0,
+}
 
 
 # =============================================================================
@@ -79,6 +91,7 @@ class MultiVenueRouter:
         self.prefer_bags_threshold_bps = prefer_bags_threshold_bps
         self.redis_url = redis_url
         self._session: Optional[aiohttp.ClientSession] = None
+        self.execution_pipeline = TradingPipeline()
 
         # Analytics tracking
         self.routing_stats = {
@@ -344,6 +357,18 @@ class MultiVenueRouter:
             f"{decision.reason}"
         )
 
+        gate_result = self._evaluate_execution_gate(
+            input_mint=input_mint,
+            output_mint=output_mint,
+            amount=amount,
+            selected_quote=selected_quote,
+            selected_venue=decision.selected_venue,
+        )
+        if gate_result.action != PipelineAction.ENTER:
+            reason = gate_result.rejection_reason.value if gate_result.rejection_reason else "unknown"
+            detail = gate_result.rejection_detail or "trade rejected"
+            raise ValueError(f"Execution gate rejected ({reason}): {detail}")
+
         # Execute on selected venue
         if decision.selected_venue == Venue.BAGS:
             result = await self._execute_bags_swap(selected_quote, wallet_keypair)
@@ -404,6 +429,136 @@ class MultiVenueRouter:
             # ... (actual signing logic)
 
             return data
+
+    def _evaluate_execution_gate(
+        self,
+        *,
+        input_mint: str,
+        output_mint: str,
+        amount: int,
+        selected_quote: Quote,
+        selected_venue: Venue,
+    ):
+        """Evaluate a routed quote against the event-driven execution gate."""
+        event, trade_size_usd = self._build_market_event(
+            input_mint=input_mint,
+            output_mint=output_mint,
+            amount=amount,
+            selected_quote=selected_quote,
+            selected_venue=selected_venue,
+        )
+        return self.execution_pipeline.evaluate(
+            event,
+            trade_size_usd=trade_size_usd,
+            entry_price=event.current_price,
+            pool_liquidity_usd=event.pool_liquidity_usd,
+        )
+
+    def _build_market_event(
+        self,
+        *,
+        input_mint: str,
+        output_mint: str,
+        amount: int,
+        selected_quote: Quote,
+        selected_venue: Venue,
+    ) -> Tuple[MarketEvent, float]:
+        """Construct a conservative market event from the routed quote."""
+        asset_class = self._infer_asset_class(
+            input_mint=input_mint,
+            output_mint=output_mint,
+            selected_venue=selected_venue,
+        )
+        trade_size_usd = self._estimate_trade_size_usd(
+            input_mint=input_mint,
+            output_mint=output_mint,
+            amount=amount,
+            selected_quote=selected_quote,
+        )
+        pool_liquidity_usd = self._estimate_pool_liquidity_usd(
+            asset_class=asset_class,
+            trade_size_usd=trade_size_usd,
+            price_impact_pct=float(selected_quote.price_impact or 0.0),
+        )
+
+        event_type = MarketEventType.PRICE_BREAKOUT
+        urgency = EventUrgency.FAST
+        if asset_class == AssetClass.BAGS_BONDING_CURVE:
+            event_type = MarketEventType.TOKEN_LAUNCH
+            urgency = EventUrgency.IMMEDIATE
+        elif asset_class == AssetClass.BAGS_GRADUATED:
+            event_type = MarketEventType.GRADUATION
+            urgency = EventUrgency.IMMEDIATE
+
+        trade_mint = output_mint if input_mint == SOL_MINT else input_mint
+        symbol = trade_mint[:8].upper()
+        return (
+            MarketEvent(
+                event_type=event_type,
+                urgency=urgency,
+                timestamp=datetime.now(timezone.utc),
+                mint_address=trade_mint,
+                symbol=symbol,
+                asset_class=asset_class,
+                current_price=0.0,
+                pool_liquidity_usd=pool_liquidity_usd,
+            ),
+            trade_size_usd,
+        )
+
+    def _infer_asset_class(
+        self,
+        *,
+        input_mint: str,
+        output_mint: str,
+        selected_venue: Venue,
+    ) -> AssetClass:
+        """Infer asset class from route direction and venue."""
+        if input_mint == SOL_MINT and output_mint == SOL_MINT:
+            return AssetClass.NATIVE_SOLANA
+
+        if selected_venue == Venue.BAGS and input_mint == SOL_MINT:
+            return AssetClass.BAGS_BONDING_CURVE
+
+        if selected_venue == Venue.BAGS and output_mint == SOL_MINT:
+            return AssetClass.BAGS_GRADUATED
+
+        if input_mint == SOL_MINT or output_mint == SOL_MINT:
+            return AssetClass.MEMECOIN
+
+        return AssetClass.MEMECOIN
+
+    def _estimate_trade_size_usd(
+        self,
+        *,
+        input_mint: str,
+        output_mint: str,
+        amount: int,
+        selected_quote: Quote,
+    ) -> float:
+        """Estimate USD notional conservatively from the SOL side of the route."""
+        if input_mint == SOL_MINT:
+            return max((amount / 1_000_000_000) * DEFAULT_SOL_PRICE_USD, 0.0)
+
+        if output_mint == SOL_MINT:
+            return max((selected_quote.output_amount / 1_000_000_000) * DEFAULT_SOL_PRICE_USD, 0.0)
+
+        return 500.0
+
+    def _estimate_pool_liquidity_usd(
+        self,
+        *,
+        asset_class: AssetClass,
+        trade_size_usd: float,
+        price_impact_pct: float,
+    ) -> float:
+        """Estimate pool depth from price impact, with conservative fallbacks."""
+        if price_impact_pct > 0 and trade_size_usd > 0:
+            estimated = trade_size_usd / (2 * price_impact_pct)
+            if estimated > 0:
+                return estimated
+
+        return DEFAULT_POOL_LIQUIDITY_USD.get(asset_class, 50_000.0)
 
     # =========================================================================
     # ANALYTICS
