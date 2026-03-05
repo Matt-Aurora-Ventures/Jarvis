@@ -52,4 +52,18 @@ describe('GET /api/investments/performance', () => {
     expect(body.change_pct).toBe(0);
     expect(body._fallback).toBe(true);
   });
+
+  it('returns fallback payload when investments upstream base URL is not configured', async () => {
+    delete process.env.INVESTMENTS_SERVICE_BASE_URL;
+    const mockFetch = vi.mocked(fetch);
+
+    const route = await import('@/app/api/investments/performance/route');
+    const res = await route.GET(new Request('http://localhost/api/investments/performance?hours=24'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body._fallback).toBe(true);
+    expect(body._fallbackReason).toBe('investments_upstream_unavailable');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
 });

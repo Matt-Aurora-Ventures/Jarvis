@@ -11,7 +11,7 @@ param(
   [string]$SolanaWalletKey,
   [string]$StakingPoolAddress = "",
   [string]$AuthorityRewardAccount = "",
-  [string]$BaseRpcUrl = "https://mainnet.base.org",
+  [string]$EthRpcUrl = "https://eth.llamarpc.com",
   [string]$SolanaRpcUrl = "https://api.mainnet-beta.solana.com",
   [string]$BirdeyeApiKey = "",
   [string]$XaiApiKeySecret = "jarvis-xai-runtime-key",
@@ -56,7 +56,7 @@ $envVars = @(
   "INVESTMENT_API_PORT=8080",
   "INVESTMENT_ADMIN_KEY=$AdminKey",
   "DRY_RUN=$($DryRun.ToString().ToLowerInvariant())",
-  "BASE_RPC_URL=$BaseRpcUrl",
+  "ETH_RPC_URL=$EthRpcUrl",
   "SOLANA_RPC_URL=$SolanaRpcUrl",
   "BIRDEYE_API_KEY=$BirdeyeApiKey",
   "BASKET_ADDRESS=$BasketAddress",
@@ -64,6 +64,8 @@ $envVars = @(
   "SOLANA_WALLET_KEY=$SolanaWalletKey",
   "STAKING_POOL_ADDRESS=$StakingPoolAddress",
   "AUTHORITY_REWARD_ACCOUNT=$AuthorityRewardAccount",
+  "ENABLE_BRIDGE_AUTOMATION=false",
+  "ENABLE_STAKING_AUTOMATION=false",
   "ANTHROPIC_API_KEY=$AnthropicApiKey",
   "OPENAI_API_KEY=$OpenAiApiKey"
 ) -join ","

@@ -50,10 +50,9 @@ describe('InvestmentsPageClient disabled-surface behavior', () => {
 
     const html = renderToStaticMarkup(<InvestmentsPageClient />);
 
-    expect(html).toContain('Two paths only: basket investing or perps execution.');
+    expect(html).toContain('Manage the Alvara basket from one operator panel.');
     expect(html).toContain('Fast path');
     expect(html).toContain('Investments (disabled)');
-    expect(html).toContain('Perps (disabled)');
     expect(html).toContain('role="tablist"');
     expect(html).toContain('role="tab"');
     expect(html).toContain('role="tabpanel"');
@@ -61,7 +60,7 @@ describe('InvestmentsPageClient disabled-surface behavior', () => {
     expect(html).toContain('Investments is in staged rollout for this runtime.');
   });
 
-  it('keeps panel shell visible while showing perps-disabled overlay', async () => {
+  it('falls back to the investments panel when the requested perps tab is disabled', async () => {
     process.env.NEXT_PUBLIC_ENABLE_INVESTMENTS = 'true';
     process.env.NEXT_PUBLIC_ENABLE_PERPS = 'false';
     searchParams = new URLSearchParams('tab=perps');
@@ -69,8 +68,23 @@ describe('InvestmentsPageClient disabled-surface behavior', () => {
 
     const html = renderToStaticMarkup(<InvestmentsPageClient />);
 
-    expect(html).toContain('perps-panel:Perps is in staged rollout for this runtime.');
-    expect(html).toContain('Perps is in staged rollout for this runtime.');
+    expect(html).toContain('alvara-panel:enabled');
+    expect(html).not.toContain('perps-panel');
+    expect(html).not.toContain('Perps (disabled)');
+  });
+
+  it('hides the disabled perps path when investments is the only active surface', async () => {
+    process.env.NEXT_PUBLIC_ENABLE_INVESTMENTS = 'true';
+    process.env.NEXT_PUBLIC_ENABLE_PERPS = 'false';
+    searchParams = new URLSearchParams('tab=investments');
+    const { InvestmentsPageClient } = await import('@/components/investments/InvestmentsPageClient');
+
+    const html = renderToStaticMarkup(<InvestmentsPageClient />);
+
+    expect(html).toContain('Investments Workspace');
+    expect(html).toContain('Investments');
+    expect(html).not.toContain('Perps (disabled)');
+    expect(html).not.toContain('Get Updates on Telegram');
   });
 });
 

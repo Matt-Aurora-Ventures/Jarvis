@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 
-const DEFAULT_INVESTMENTS_BASE_URL = 'http://127.0.0.1:8770';
 const DEFAULT_INVESTMENTS_TIMEOUT_MS = 6000;
 
+function configuredBaseUrl(): string | null {
+  const raw = String(process.env.INVESTMENTS_SERVICE_BASE_URL || '').trim();
+  return raw ? raw.replace(/\/+$/, '') : null;
+}
+
 function baseUrl(): string {
-  return String(process.env.INVESTMENTS_SERVICE_BASE_URL || DEFAULT_INVESTMENTS_BASE_URL).trim().replace(/\/+$/, '');
+  const configured = configuredBaseUrl();
+  return configured || '';
 }
 
 function requestTimeoutMs(): number {
@@ -16,6 +21,16 @@ function requestTimeoutMs(): number {
 function upstreamUrl(path: string, query?: URLSearchParams): string {
   const q = query && query.toString() ? `?${query.toString()}` : '';
   return `${baseUrl()}/api/investments${path}${q}`;
+}
+
+function upstreamNotConfigured(): NextResponse {
+  return NextResponse.json(
+    {
+      error: 'Investments upstream base URL is not configured',
+      code: 'UPSTREAM_NOT_CONFIGURED',
+    },
+    { status: 503 },
+  );
 }
 
 function extractBearerToken(request: Request): string | null {
@@ -90,6 +105,9 @@ export function verifyInvestmentsAdminAuth(request: Request): NextResponse | nul
 
 export async function proxyInvestmentsGet(path: string, request: Request): Promise<NextResponse> {
   try {
+    if (!configuredBaseUrl()) {
+      return upstreamNotConfigured();
+    }
     const url = new URL(request.url);
     const token = extractBearerToken(request);
     const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
@@ -108,11 +126,23 @@ export async function proxyInvestmentsGet(path: string, request: Request): Promi
 
 export async function proxyInvestmentsPost(path: string, request: Request): Promise<NextResponse> {
   try {
+    if (!configuredBaseUrl()) {
+      return upstreamNotConfigured();
+    }
     const payload = await request.json().catch(() => ({}));
     const token = String(process.env.INVESTMENTS_ADMIN_TOKEN || '').trim();
+    if (!token) {
+      return NextResponse.json(
+        {
+          error: 'Investments admin token is not configured',
+          code: 'ADMIN_TOKEN_NOT_CONFIGURED',
+        },
+        { status: 503 },
+      );
+    }
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Authorization: `Bearer ${token}`,
     };
     const signal = AbortSignal.timeout(requestTimeoutMs());
     const upstream = await fetch(upstreamUrl(path), {

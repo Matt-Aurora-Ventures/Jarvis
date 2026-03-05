@@ -20,9 +20,23 @@ export function InvestmentsPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTab = useMemo(() => tabFromSearch(searchParams.get('tab')), [searchParams]);
-  const effectiveTab: InvestmentsTab = requestedTab;
   const investmentsSurface = resolveSurfaceAvailability('investments');
   const perpsSurface = resolveSurfaceAvailability('perps');
+  const availableTabs = [
+    investmentsSurface.enabled ? 'investments' : null,
+    perpsSurface.enabled ? 'perps' : null,
+  ].filter(Boolean) as InvestmentsTab[];
+  const effectiveTab: InvestmentsTab =
+    availableTabs.includes(requestedTab)
+      ? requestedTab
+      : availableTabs[0] || requestedTab;
+  const showInvestmentsTab = investmentsSurface.enabled || !perpsSurface.enabled;
+  const showPerpsTab = perpsSurface.enabled;
+  const showRolloutLink = !investmentsSurface.enabled && !perpsSurface.enabled;
+  const summaryText =
+    showPerpsTab
+      ? 'Two paths only: basket investing or perps execution.'
+      : 'Manage the Alvara basket from one operator panel.';
 
   const setTab = (next: InvestmentsTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -39,16 +53,20 @@ export function InvestmentsPageClient() {
       <main className="app-shell flex-1 py-6 space-y-4">
         <section className="rounded-xl border border-border-primary bg-bg-secondary p-4">
           <h1 className="text-lg font-display font-semibold text-text-primary">Investments Workspace</h1>
-          <p className="mt-1 text-xs text-text-muted">Two paths only: basket investing or perps execution.</p>
+          <p className="mt-1 text-xs text-text-muted">{summaryText}</p>
           <div className="mt-3 rounded-lg border border-border-primary bg-bg-tertiary/45 p-3">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">Fast path</h2>
             <ol className="mt-2 list-decimal pl-4 text-xs text-text-muted space-y-1">
-              <li>Select `Perps` to trade or `Investments` to manage the Alvara basket.</li>
-              <li>Perps: press `Ready Bot`, choose setup, submit entry.</li>
+              <li>
+                {showPerpsTab
+                  ? 'Select `Perps` to trade or `Investments` to manage the Alvara basket.'
+                  : 'Use the investments panel to monitor basket state and execute a cycle when needed.'}
+              </li>
+              {showPerpsTab && <li>Perps: press `Ready Bot`, choose setup, submit entry.</li>}
               <li>Basket: press `Run Basket Cycle` for normal ops, `Pause Basket` only for emergency stop.</li>
             </ol>
           </div>
-          {(!investmentsSurface.enabled || !perpsSurface.enabled) && (
+          {showRolloutLink && (
             <a
               href="https://t.me/kr8tivaisystems"
               target="_blank"
@@ -74,34 +92,38 @@ export function InvestmentsPageClient() {
           className="rounded-xl border border-border-primary bg-bg-secondary p-2"
         >
           <div className="flex flex-wrap gap-2">
-            <button
-              id="investments-tab-investments"
-              role="tab"
-              aria-selected={effectiveTab === 'investments'}
-              aria-controls="investments-tabpanel-investments"
-              onClick={() => setTab('investments')}
-              className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
-                effectiveTab === 'investments'
-                  ? 'border-accent-neon/50 bg-accent-neon/12 text-accent-neon'
-                  : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
-              } ${!investmentsSurface.enabled ? 'opacity-80' : ''}`}
-            >
-              Investments {!investmentsSurface.enabled ? '(disabled)' : ''}
-            </button>
-            <button
-              id="investments-tab-perps"
-              role="tab"
-              aria-selected={effectiveTab === 'perps'}
-              aria-controls="investments-tabpanel-perps"
-              onClick={() => setTab('perps')}
-              className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
-                effectiveTab === 'perps'
-                  ? 'border-blue-400/50 bg-blue-500/12 text-blue-300'
-                  : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
-              } ${!perpsSurface.enabled ? 'opacity-80' : ''}`}
-            >
-              Perps {!perpsSurface.enabled ? '(disabled)' : ''}
-            </button>
+            {showInvestmentsTab && (
+              <button
+                id="investments-tab-investments"
+                role="tab"
+                aria-selected={effectiveTab === 'investments'}
+                aria-controls="investments-tabpanel-investments"
+                onClick={() => setTab('investments')}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                  effectiveTab === 'investments'
+                    ? 'border-accent-neon/50 bg-accent-neon/12 text-accent-neon'
+                    : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
+                } ${!investmentsSurface.enabled ? 'opacity-80' : ''}`}
+              >
+                Investments {!investmentsSurface.enabled ? '(disabled)' : ''}
+              </button>
+            )}
+            {showPerpsTab && (
+              <button
+                id="investments-tab-perps"
+                role="tab"
+                aria-selected={effectiveTab === 'perps'}
+                aria-controls="investments-tabpanel-perps"
+                onClick={() => setTab('perps')}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                  effectiveTab === 'perps'
+                    ? 'border-blue-400/50 bg-blue-500/12 text-blue-300'
+                    : 'border-border-primary bg-bg-tertiary text-text-muted hover:text-text-primary'
+                } ${!perpsSurface.enabled ? 'opacity-80' : ''}`}
+              >
+                Perps {!perpsSurface.enabled ? '(disabled)' : ''}
+              </button>
+            )}
           </div>
         </section>
 

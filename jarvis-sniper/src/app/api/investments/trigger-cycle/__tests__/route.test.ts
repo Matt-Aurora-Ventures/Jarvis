@@ -44,15 +44,9 @@ describe('POST /api/investments/trigger-cycle', () => {
     );
   });
 
-  it('still proxies when server admin token is missing (upstream decides auth)', async () => {
+  it('fails closed when server admin token is missing', async () => {
     delete process.env.INVESTMENTS_ADMIN_TOKEN;
     const mockFetch = vi.mocked(fetch);
-    mockFetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
 
     const route = await import('@/app/api/investments/trigger-cycle/route');
     const res = await route.POST(
@@ -60,15 +54,8 @@ describe('POST /api/investments/trigger-cycle', () => {
     );
     const body = await res.json();
 
-    expect(res.status).toBe(401);
-    expect(String(body.error || '')).toContain('Unauthorized');
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:8770/api/investments/trigger-cycle',
-      expect.objectContaining({
-        method: 'POST',
-      }),
-    );
-    const call = mockFetch.mock.calls[0]?.[1] as RequestInit | undefined;
-    expect((call?.headers as Record<string, string> | undefined)?.Authorization).toBeUndefined();
+    expect(res.status).toBe(503);
+    expect(String(body.error || '')).toContain('admin token');
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
