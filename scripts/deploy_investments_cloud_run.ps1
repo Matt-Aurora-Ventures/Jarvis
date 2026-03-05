@@ -33,7 +33,7 @@ if (-not $DryRun) {
   if ([string]::IsNullOrWhiteSpace($OpenAiApiKey)) { throw "Missing -OpenAiApiKey" }
 }
 
-$image = "$Region-docker.pkg.dev/$Project/$Repository/$Service:latest"
+$image = "$Region-docker.pkg.dev/$Project/$Repository/${Service}:latest"
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 $cloudBuildConfig = Join-Path $scriptDir "cloudbuild.investments.yaml"
@@ -49,6 +49,9 @@ gcloud builds submit `
   --region $Region `
   --config $cloudBuildConfig `
   --substitutions "_IMAGE=$image"
+if ($LASTEXITCODE -ne 0) {
+  throw "[investments] Cloud Build failed"
+}
 
 $envVars = @(
   "DATABASE_URL=$DatabaseUrl",
@@ -80,6 +83,9 @@ gcloud run deploy $Service `
   --set-env-vars $envVars `
   --set-secrets "XAI_API_KEY=$XaiApiKeySecret:latest" `
   --quiet | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "[investments] Cloud Run deploy failed"
+}
 
 $url = gcloud run services describe $Service `
   --project $Project `
