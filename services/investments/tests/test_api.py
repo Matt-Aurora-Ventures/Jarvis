@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.investments.api import app, set_dependencies
+from services.investments.api import _adapt_reflection, app, set_dependencies
 
 
 @pytest.fixture
@@ -72,9 +72,16 @@ class TestBasketEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert "tokens" in data
-        assert "nav_usd" in data
-        assert data["nav_usd"] == 200.0
+        assert "total_nav" in data
+        assert data["total_nav"] == 200.0
         assert len(data["tokens"]) == 3
+        # Verify adapter transforms tokens dict → array with frontend field names
+        token = data["tokens"][0]
+        assert "symbol" in token
+        assert "mint" in token
+        assert "weight" in token
+        assert "usd_value" in token
+        assert "price" in token
 
 
 class TestDecisionsEndpoint:
@@ -82,6 +89,31 @@ class TestDecisionsEndpoint:
         resp = client.get("/api/investments/decisions")
         assert resp.status_code == 200
         assert resp.json() == []
+
+
+class TestReflectionAdapter:
+    def test_derives_dashboard_fields_from_runtime_reflection_payload(self):
+        adapted = _adapt_reflection(
+            {
+                "id": 7,
+                "ts": "2026-03-05T00:00:00+00:00",
+                "calibration_hint": "Bias slightly toward HOLD after weak rebalance follow-through.",
+                "data": {
+                    "predicted_action": "REBALANCE",
+                    "nav_change_pct": -0.021,
+                    "agent_accuracy_scores": {
+                        "grok_sentiment": 0.8,
+                        "claude_risk": 0.6,
+                    },
+                },
+            }
+        )
+
+        assert adapted["accuracy_pct"] == 70.0
+        assert adapted["lessons"]
+        assert adapted["adjustments"] == [
+            "Bias slightly toward HOLD after weak rebalance follow-through."
+        ]
 
 
 class TestKillSwitchEndpoints:
@@ -108,7 +140,7 @@ class TestKillSwitchEndpoints:
             headers={"Authorization": "Bearer test-admin-key"},
         )
         assert resp.status_code == 200
-        assert resp.json()["status"] == "activated"
+        assert resp.json()["active"] is True
 
     def test_deactivate_correct_key(self, client):
         resp = client.post(
@@ -116,7 +148,7 @@ class TestKillSwitchEndpoints:
             headers={"Authorization": "Bearer test-admin-key"},
         )
         assert resp.status_code == 200
-        assert resp.json()["status"] == "deactivated"
+        assert resp.json()["active"] is False
 
 
 class TestTriggerCycleEndpoint:
@@ -144,3 +176,14 @@ class TestAuthOpenAccess:
 
         resp = client.post("/api/investments/kill-switch/activate")
         assert resp.status_code == 200
+
+    def test_no_admin_key_blocks_live_writes(self, mock_orchestrator, mock_db, mock_redis):
+        """Live mode must fail closed when admin auth is not configured."""
+        from fastapi.testclient import TestClient
+        mock_orchestrator.cfg.admin_key = ""
+        mock_orchestrator.cfg.dry_run = False
+        set_dependencies(mock_orchestrator, mock_db, mock_redis)
+        client = TestClient(app)
+
+        resp = client.post("/api/investments/trigger-cycle")
+        assert resp.status_code == 503

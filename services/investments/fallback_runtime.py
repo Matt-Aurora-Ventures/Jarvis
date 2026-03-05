@@ -39,14 +39,33 @@ class FallbackOrchestrator:
         self._next_decision_id = 1
 
         self._basket_tokens = {
-            "ALVA": {"weight": 0.10, "price_usd": 0.50, "liquidity_usd": 200_000},
-            "WETH": {"weight": 0.25, "price_usd": 3200.0, "liquidity_usd": 5_000_000},
-            "WBTC": {"weight": 0.20, "price_usd": 95_000.0, "liquidity_usd": 3_000_000},
-            "USDC": {"weight": 0.15, "price_usd": 1.0, "liquidity_usd": 50_000_000},
-            "UNI": {"weight": 0.15, "price_usd": 12.50, "liquidity_usd": 2_000_000},
-            "LINK": {"weight": 0.15, "price_usd": 18.0, "liquidity_usd": 1_500_000},
+            "ALVA": {
+                "weight": 0.10, "price_usd": 0.50, "balance": 40.0,
+                "address": "0x8e729198d1C59B82bd6bBa579310C40d740A11C2",
+            },
+            "WETH": {
+                "weight": 0.25, "price_usd": 3200.0, "balance": 0.015625,
+                "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            },
+            "WBTC": {
+                "weight": 0.20, "price_usd": 95_000.0, "balance": 0.000421,
+                "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            },
+            "USDC": {
+                "weight": 0.15, "price_usd": 1.0, "balance": 30.0,
+                "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            },
+            "UNI": {
+                "weight": 0.15, "price_usd": 12.50, "balance": 2.4,
+                "address": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+            },
+            "LINK": {
+                "weight": 0.15, "price_usd": 18.0, "balance": 1.667,
+                "address": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+            },
         }
         self._nav_usd = 200.0
+        self._last_cycle_ts: str | None = None
         self._decisions: list[dict[str, Any]] = []
         self._reflections: list[dict[str, Any]] = []
 
@@ -120,11 +139,17 @@ class FallbackOrchestrator:
             "navAtDecision": float(self._nav_usd),
         }
         self._decisions.append(decision)
+        self._last_cycle_ts = ts.isoformat()
         self._reflections.append(
             {
                 "id": decision_id,
                 "decision_id": decision_id,
-                "data": {"summary": "Fallback reflection placeholder"},
+                "data": {
+                    "summary": "Fallback reflection placeholder",
+                    "accuracy_pct": 0.0,
+                    "lessons": ["Running in dry-run fallback mode"],
+                    "adjustments": [],
+                },
                 "calibration_hint": "No adjustments in fallback mode.",
                 "ts": ts.isoformat(),
             }

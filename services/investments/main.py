@@ -25,6 +25,58 @@ logging.basicConfig(
 logger = logging.getLogger("investments.main")
 
 
+_REQUIRED_RUNTIME_SCHEMA: dict[str, set[str]] = {
+    "inv_decisions": {
+        "basket_id",
+        "trigger_type",
+        "previous_weights",
+        "basket_nav_usd",
+        "risk_approved",
+        "trader_confidence",
+        "trader_reasoning",
+    },
+    "inv_nav_snapshots": {"basket_id", "ts", "nav_usd"},
+    "inv_reflections": {"decision_id", "data", "calibration_hint"},
+    "inv_bridge_jobs": {"state", "amount_usdc", "amount_raw"},
+}
+
+
+async def _verify_schema_compatibility(conn: asyncpg.Connection) -> None:
+    """Fail fast when an existing database is missing columns current code needs."""
+    rows = await conn.fetch(
+        """
+        SELECT table_name, column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = ANY($1::text[])
+        """,
+        list(_REQUIRED_RUNTIME_SCHEMA.keys()),
+    )
+
+    columns_by_table: dict[str, set[str]] = {}
+    for row in rows:
+        columns_by_table.setdefault(row["table_name"], set()).add(row["column_name"])
+
+    problems: list[str] = []
+    for table_name, required_columns in _REQUIRED_RUNTIME_SCHEMA.items():
+        present = columns_by_table.get(table_name)
+        if not present:
+            problems.append(f"{table_name} table is missing")
+            continue
+
+        missing_columns = sorted(required_columns - present)
+        if missing_columns:
+            problems.append(
+                f"{table_name} missing columns: {', '.join(missing_columns)}"
+            )
+
+    if problems:
+        raise RuntimeError(
+            "Investment schema incompatible with current runtime: "
+            + "; ".join(problems)
+        )
+
+
 async def _init_db(cfg: InvestmentConfig) -> asyncpg.Pool:
     logger.info("Connecting to PostgreSQL: %s", cfg.database_url.split("@")[-1])
     pool = await asyncpg.create_pool(
@@ -70,6 +122,7 @@ async def _run_migrations(pool: asyncpg.Pool) -> None:
             sql = sql_file.read_text()
             await conn.execute(sql)
 
+        await _verify_schema_compatibility(conn)
         logger.info("All migrations applied.")
 
 
@@ -98,6 +151,8 @@ async def main() -> None:
         db = await _init_db(cfg)
         rds = await _init_redis(cfg)
         await _run_migrations(db)
+        async with db.acquire() as conn:
+            await _verify_schema_compatibility(conn)
         orchestrator = Orchestrator(cfg, db, rds)
     except Exception:
         if not cfg.dry_run:
@@ -130,6 +185,10 @@ async def main() -> None:
         scheduler = create_scheduler(orchestrator)
         scheduler.start()
         logger.info("Scheduler started with %d jobs.", len(scheduler.get_jobs()))
+        if not cfg.enable_bridge_automation:
+            logger.warning("Bridge automation disabled until CCTP path is fully verified.")
+        if not cfg.enable_staking_automation:
+            logger.warning("Staking automation disabled until Solana deposit path is fully verified.")
     else:
         logger.warning("Fallback runtime active: scheduler disabled.")
 

@@ -4,6 +4,35 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+_ENV_ALREADY_LOADED = False
+
+
+def load_investment_env(env_file: str | Path | None = None) -> None:
+    """Load service-local .env values without overriding real environment vars."""
+    global _ENV_ALREADY_LOADED
+
+    if env_file is not None:
+        load_dotenv(dotenv_path=Path(env_file), override=False)
+        return
+
+    if _ENV_ALREADY_LOADED:
+        return
+
+    service_dir = Path(__file__).resolve().parent
+    repo_root = service_dir.parents[1]
+    for candidate in (service_dir / ".env", repo_root / ".env"):
+        if candidate.exists():
+            load_dotenv(dotenv_path=candidate, override=False)
+
+    _ENV_ALREADY_LOADED = True
+
+
+load_investment_env()
 
 
 def _env(name: str, default: str = "") -> str:
@@ -96,6 +125,12 @@ class InvestmentConfig:
     max_single_bridge_usd: float = 10_000.0
     bridge_threshold_usd: float = 50.0
     bridge_max_gas_gwei: float = 5.0
+    enable_bridge_automation: bool = field(
+        default_factory=lambda: _env_bool("ENABLE_BRIDGE_AUTOMATION", False)
+    )
+    enable_staking_automation: bool = field(
+        default_factory=lambda: _env_bool("ENABLE_STAKING_AUTOMATION", False)
+    )
 
     # --- API Authentication ---
     admin_key: str = field(default_factory=lambda: _env("INVESTMENT_ADMIN_KEY"))

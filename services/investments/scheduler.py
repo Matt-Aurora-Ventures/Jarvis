@@ -19,6 +19,7 @@ def create_scheduler(orchestrator: Orchestrator) -> AsyncIOScheduler:
     """Build and return the APScheduler with all investment jobs."""
 
     scheduler = AsyncIOScheduler(timezone="UTC")
+    cfg = orchestrator.cfg
 
     # Daily investment cycle at 00:00 UTC
     scheduler.add_job(
@@ -51,35 +52,37 @@ def create_scheduler(orchestrator: Orchestrator) -> AsyncIOScheduler:
         max_instances=1,
     )
 
-    # Bridge fee check every 6 hours
-    scheduler.add_job(
-        _check_bridge,
-        trigger=IntervalTrigger(hours=6),
-        args=[orchestrator],
-        id="bridge_fee_check",
-        name="Bridge Fee Check (6h)",
-        max_instances=1,
-    )
+    if getattr(cfg, "enable_bridge_automation", False):
+        # Bridge fee check every 6 hours
+        scheduler.add_job(
+            _check_bridge,
+            trigger=IntervalTrigger(hours=6),
+            args=[orchestrator],
+            id="bridge_fee_check",
+            name="Bridge Fee Check (6h)",
+            max_instances=1,
+        )
 
-    # Advance pending bridge jobs every 30 seconds
-    scheduler.add_job(
-        _advance_bridges,
-        trigger=IntervalTrigger(seconds=30),
-        args=[orchestrator],
-        id="bridge_advance",
-        name="Bridge Advance (30s)",
-        max_instances=1,
-    )
+        # Advance pending bridge jobs every 30 seconds
+        scheduler.add_job(
+            _advance_bridges,
+            trigger=IntervalTrigger(seconds=30),
+            args=[orchestrator],
+            id="bridge_advance",
+            name="Bridge Advance (30s)",
+            max_instances=1,
+        )
 
-    # Staking deposit check every hour
-    scheduler.add_job(
-        _staking_deposit,
-        trigger=IntervalTrigger(hours=1),
-        args=[orchestrator],
-        id="staking_deposit",
-        name="Staking Deposit (1h)",
-        max_instances=1,
-    )
+    if getattr(cfg, "enable_staking_automation", False):
+        # Staking deposit check every hour
+        scheduler.add_job(
+            _staking_deposit,
+            trigger=IntervalTrigger(hours=1),
+            args=[orchestrator],
+            id="staking_deposit",
+            name="Staking Deposit (1h)",
+            max_instances=1,
+        )
 
     logger.info("Scheduler created with %d jobs", len(scheduler.get_jobs()) if hasattr(scheduler, 'get_jobs') else 6)
     return scheduler

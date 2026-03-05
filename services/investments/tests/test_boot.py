@@ -38,7 +38,12 @@ def test_fallback_trigger_cycle():
     set_dependencies(orch, None, None)
 
     client = TestClient(app)
-    resp = client.post("/api/investments/trigger-cycle")
+    headers = (
+        {"Authorization": f"Bearer {cfg.admin_key}"}
+        if cfg.admin_key
+        else None
+    )
+    resp = client.post("/api/investments/trigger-cycle", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "completed"

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+import services.investments.config as config_module
 from services.investments.config import InvestmentConfig
 
 
@@ -35,6 +37,25 @@ class TestConfigDefaults:
         assert cfg.max_daily_bridge_usd == 50_000.0
         assert cfg.bridge_threshold_usd == 50.0
         assert cfg.bridge_max_gas_gwei == 5.0
+
+    def test_automation_defaults_disabled(self):
+        with patch.dict(os.environ, {}, clear=True):
+            cfg = InvestmentConfig()
+            assert cfg.enable_bridge_automation is False
+            assert cfg.enable_staking_automation is False
+
+    def test_load_investment_env_reads_service_env_file(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "XAI_API_KEY=from-file\nINVESTMENT_ADMIN_KEY=test-admin\n",
+            encoding="utf-8",
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            config_module.load_investment_env(Path(env_file))
+            cfg = InvestmentConfig()
+            assert cfg.xai_api_key == "from-file"
+            assert cfg.admin_key == "test-admin"
 
 
 class TestConfigValidation:
