@@ -40,8 +40,8 @@ class TestPortfolioGuard:
     @pytest.mark.asyncio
     async def test_valid_rebalance_passes(self, safety):
         ok, msg = await safety.check_portfolio_limits(
-            proposed_weights={"ALVA": 0.10, "WETH": 0.25, "USDC": 0.30, "cbBTC": 0.20, "AERO": 0.15},
-            current_weights={"ALVA": 0.10, "WETH": 0.30, "USDC": 0.25, "cbBTC": 0.20, "AERO": 0.15},
+            proposed_weights={"ALVA": 0.10, "WETH": 0.25, "USDC": 0.30, "WBTC": 0.20, "UNI": 0.15},
+            current_weights={"ALVA": 0.10, "WETH": 0.30, "USDC": 0.25, "WBTC": 0.20, "UNI": 0.15},
         )
         assert ok is True
         assert msg == ""
@@ -59,8 +59,8 @@ class TestPortfolioGuard:
     @pytest.mark.asyncio
     async def test_alva_below_5pct_minimum(self, safety):
         ok, msg = await safety.check_portfolio_limits(
-            proposed_weights={"ALVA": 0.02, "WETH": 0.28, "USDC": 0.30, "cbBTC": 0.20, "AERO": 0.20},
-            current_weights={"ALVA": 0.10, "WETH": 0.25, "USDC": 0.30, "cbBTC": 0.20, "AERO": 0.15},
+            proposed_weights={"ALVA": 0.02, "WETH": 0.28, "USDC": 0.30, "WBTC": 0.20, "UNI": 0.20},
+            current_weights={"ALVA": 0.10, "WETH": 0.25, "USDC": 0.30, "WBTC": 0.20, "UNI": 0.15},
         )
         assert ok is False
         assert "ALVA" in msg
@@ -71,8 +71,8 @@ class TestPortfolioGuard:
         # All tokens under 30% individually, but total rebalance > 25%
         # WETH: 0.30→0.03 = 0.27, USDC: 0.03→0.30 = 0.27, sum=0.54, /2=0.27 > 0.25
         ok, msg = await safety.check_portfolio_limits(
-            proposed_weights={"ALVA": 0.10, "WETH": 0.03, "USDC": 0.30, "cbBTC": 0.30, "AERO": 0.27},
-            current_weights={"ALVA": 0.10, "WETH": 0.30, "USDC": 0.03, "cbBTC": 0.30, "AERO": 0.27},
+            proposed_weights={"ALVA": 0.10, "WETH": 0.03, "USDC": 0.30, "WBTC": 0.30, "UNI": 0.27},
+            current_weights={"ALVA": 0.10, "WETH": 0.30, "USDC": 0.03, "WBTC": 0.30, "UNI": 0.27},
         )
         assert ok is False
         assert "change" in msg.lower()

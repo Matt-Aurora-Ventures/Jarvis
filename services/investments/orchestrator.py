@@ -88,7 +88,7 @@ class Orchestrator:
             self._staking_cranker = StakingCranker(self.cfg, self.db, self.redis)
         return self._staking_cranker
 
-    async def run_cycle(self) -> dict[str, Any]:
+    async def run_cycle(self, trigger_type: str = "scheduled") -> dict[str, Any]:
         """Execute one full investment cycle. Returns decision record."""
         cycle_start = datetime.now(timezone.utc)
         logger.info("Investment cycle started at %s", cycle_start.isoformat())
@@ -239,6 +239,10 @@ class Orchestrator:
                 risk_assessment=risk_assessment,
                 nav=nav,
                 tx_hash=tx_hash,
+                trigger_type=trigger_type,
+                previous_weights=current_weights,
+                bull_thesis=final_bull,
+                bear_thesis=final_bear,
             )
 
             # -- Step 9: Broadcast via Redis pub/sub --
@@ -284,10 +288,10 @@ class Orchestrator:
                 "tokens": {
                     "ALVA": {"weight": 0.10, "price_usd": 0.50, "liquidity_usd": 200_000},
                     "WETH": {"weight": 0.25, "price_usd": 3200.0, "liquidity_usd": 5_000_000},
-                    "cbBTC": {"weight": 0.20, "price_usd": 95000.0, "liquidity_usd": 3_000_000},
+                    "WBTC": {"weight": 0.20, "price_usd": 95000.0, "liquidity_usd": 3_000_000},
                     "USDC": {"weight": 0.15, "price_usd": 1.0, "liquidity_usd": 50_000_000},
-                    "AERO": {"weight": 0.15, "price_usd": 1.80, "liquidity_usd": 500_000},
-                    "DEGEN": {"weight": 0.15, "price_usd": 0.012, "liquidity_usd": 300_000},
+                    "UNI": {"weight": 0.15, "price_usd": 12.50, "liquidity_usd": 2_000_000},
+                    "LINK": {"weight": 0.15, "price_usd": 18.0, "liquidity_usd": 1_500_000},
                 },
                 "nav_usd": 200.0,
             }
@@ -337,30 +341,44 @@ class Orchestrator:
         risk_assessment: dict,
         nav: float,
         tx_hash: Optional[str],
+        trigger_type: str = "scheduled",
+        previous_weights: Optional[dict] = None,
+        bull_thesis: Optional[dict] = None,
+        bear_thesis: Optional[dict] = None,
     ) -> int:
         row = await self.db.fetchrow(
             """
             INSERT INTO inv_decisions (
-                basket_id, action, final_weights, reasoning, confidence,
+                basket_id, trigger_type, action, final_weights, previous_weights,
+                basket_nav_usd,
                 grok_sentiment_report, claude_risk_report,
                 chatgpt_macro_report, dexter_fundamental_report,
-                debate_rounds, risk_assessment, nav_usd, tx_hash, created_at
+                bull_thesis, bear_thesis, debate_rounds,
+                risk_approved, risk_veto_reason,
+                trader_confidence, trader_reasoning,
+                tx_hash, created_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW()
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15, $16, $17, $18, NOW()
             ) RETURNING id
             """,
             self.cfg.basket_id,
+            trigger_type,
             trade_decision.get("action", "HOLD"),
             json.dumps(trade_decision.get("final_weights", {})),
-            trade_decision.get("reasoning", ""),
-            trade_decision.get("confidence", 0.0),
+            json.dumps(previous_weights or {}),
+            nav,
             json.dumps(analyst_reports.get("grok_sentiment", {})),
             json.dumps(analyst_reports.get("claude_risk", {})),
             json.dumps(analyst_reports.get("chatgpt_macro", {})),
             json.dumps(analyst_reports.get("dexter_fundamental", {})),
-            json.dumps([dict(r) for r in debate_rounds], default=str),
-            json.dumps(dict(risk_assessment), default=str),
-            nav,
+            json.dumps(bull_thesis or {}),
+            json.dumps(bear_thesis or {}),
+            len(debate_rounds),
+            risk_assessment.get("approved", False),
+            risk_assessment.get("veto_reason") or None,
+            trade_decision.get("confidence", 0.0),
+            trade_decision.get("reasoning", ""),
             tx_hash,
         )
         return row["id"]
@@ -368,7 +386,8 @@ class Orchestrator:
     async def _get_recent_decisions(self, limit: int = 5) -> list[dict]:
         rows = await self.db.fetch(
             """
-            SELECT id, action, confidence, nav_usd, reasoning, created_at
+            SELECT id, action, trader_confidence, basket_nav_usd,
+                   trader_reasoning, created_at
             FROM inv_decisions
             WHERE basket_id = $1
             ORDER BY created_at DESC LIMIT $2

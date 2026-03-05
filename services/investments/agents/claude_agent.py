@@ -37,7 +37,7 @@ class ClaudeRiskAnalyst:
         market_data: dict[str, Any],
         calibration_hints: str,
     ) -> RiskReport:
-        prompt = f"""You are a risk analyst for an AI-managed crypto portfolio on Base.
+        prompt = f"""You are a risk analyst for an AI-managed crypto portfolio on Ethereum mainnet.
 
 CURRENT BASKET STATE:
 {self._format_basket(basket_state)}
@@ -52,7 +52,7 @@ Analyze the portfolio for:
 1. Concentration risk (no single token should exceed 30% weight)
 2. Correlation risk (tokens moving together reduce diversification)
 3. Drawdown risk (probability of >10% portfolio loss in next 24h)
-4. Liquidity risk (can we exit positions within 1% slippage on Base DEXs)
+4. Liquidity risk (can we exit positions within 1% slippage on Ethereum DEXs)
 
 Output strict JSON matching this schema:
 {{

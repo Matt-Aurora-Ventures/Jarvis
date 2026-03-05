@@ -81,7 +81,7 @@ CONSTRAINTS:
 - Max single-rebalance change: 25% of basket value
 - No single token > 30%
 - Basket must include ALVA at >= 5% weight
-- Consider gas costs (~$0.50-2 on Base) relative to basket size ${basket_nav_usd:.2f}
+- Consider gas costs (~$5-50 on Ethereum mainnet) relative to basket size ${basket_nav_usd:.2f}
 
 Output JSON: {{"action":"REBALANCE|HOLD|EMERGENCY_EXIT","final_weights":{{}},"reasoning":"...","confidence":0.0-1.0,"estimated_gas_cost_usd":float,"estimated_slippage_pct":float}}"""
 

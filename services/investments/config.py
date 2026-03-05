@@ -49,9 +49,11 @@ class InvestmentConfig:
         default_factory=lambda: _env("REDIS_URL", "redis://localhost:6380")
     )
 
-    # --- Base (EVM) ---
+    # --- Ethereum Mainnet (EVM) ---
     base_rpc_url: str = field(
-        default_factory=lambda: _env("BASE_RPC_URL", "https://mainnet.base.org")
+        default_factory=lambda: _env(
+            "ETH_RPC_URL", _env("BASE_RPC_URL", "https://eth.llamarpc.com")
+        )
     )
     management_wallet_key: str = field(
         default_factory=lambda: _env("MANAGEMENT_WALLET_KEY")

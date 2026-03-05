@@ -1,4 +1,4 @@
-"""On-chain Event Monitor — polls Base chain for basket contract events.
+"""On-chain Event Monitor — polls Ethereum mainnet for basket contract events.
 
 Tracks:
   - Rebalanced(address indexed manager, uint256 timestamp)
@@ -66,11 +66,11 @@ BASKET_EVENTS_ABI: list[dict[str, Any]] = [
     },
 ]
 
-# Base chain average block time is ~2 seconds, poll every 12 seconds (6 blocks)
-DEFAULT_POLL_INTERVAL_S = 12
+# Ethereum mainnet block time is ~12 seconds, poll every 24 seconds (2 blocks)
+DEFAULT_POLL_INTERVAL_S = 24
 
 # Maximum number of blocks to query in a single getLogs call.
-# Public RPCs often cap this; 2000 is safe for Base.
+# Public RPCs often cap this; 2000 is safe for Ethereum.
 MAX_BLOCK_RANGE = 2_000
 
 # Redis key prefix for storing the last processed block number.
@@ -78,7 +78,7 @@ _REDIS_KEY_PREFIX = "inv:events:last_block"
 
 
 class EventMonitor:
-    """Polls Base chain for basket contract events and persists them to Postgres."""
+    """Polls Ethereum mainnet for basket contract events and persists them to Postgres."""
 
     def __init__(
         self,
@@ -365,8 +365,8 @@ class EventMonitor:
         """Return the last fully-processed block number.
 
         If no cursor exists, defaults to the current block minus a small
-        look-back window (256 blocks ~ 8 minutes on Base) so we don't miss
-        recent events on first startup.
+        look-back window (256 blocks ~ 51 minutes on Ethereum mainnet) so we
+        don't miss recent events on first startup.
         """
         val = await self.redis.get(self._redis_key())
         if val is not None:

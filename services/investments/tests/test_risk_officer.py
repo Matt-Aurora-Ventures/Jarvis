@@ -98,10 +98,10 @@ class TestHardLimits:
         officer.client.messages.create = AsyncMock(side_effect=Exception("mock"))
         result = await officer.evaluate(
             proposed_action="REBALANCE",
-            proposed_weights={"ALVA": 0.10, "WETH": 0.28, "USDC": 0.30, "cbBTC": 0.17, "AERO": 0.15},
-            current_weights={"ALVA": 0.10, "WETH": 0.25, "USDC": 0.30, "cbBTC": 0.20, "AERO": 0.15},
+            proposed_weights={"ALVA": 0.10, "WETH": 0.28, "USDC": 0.30, "WBTC": 0.17, "UNI": 0.15},
+            current_weights={"ALVA": 0.10, "WETH": 0.25, "USDC": 0.30, "WBTC": 0.20, "UNI": 0.15},
             basket_nav_usd=200.0,
-            token_liquidities={"ALVA": 200_000, "WETH": 5_000_000, "USDC": 50_000_000, "cbBTC": 10_000_000, "AERO": 500_000},
+            token_liquidities={"ALVA": 200_000, "WETH": 5_000_000, "USDC": 50_000_000, "WBTC": 10_000_000, "UNI": 500_000},
             risk_report={},
             daily_changes_so_far_pct=0.0,
         )

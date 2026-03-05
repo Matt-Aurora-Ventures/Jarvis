@@ -1,7 +1,7 @@
-"""Circle CCTP Bridge Controller — 10-state machine for bridging USDC from Base to Solana.
+"""Circle CCTP Bridge Controller — 10-state machine for bridging USDC from Ethereum to Solana.
 
 Manages the complete lifecycle of a cross-chain fee transfer:
-  Base (EVM): collect fees -> approve USDC -> burn via CCTP TokenMessenger
+  Ethereum (EVM): collect fees -> approve USDC -> burn via CCTP TokenMessenger
   Circle:     poll attestation API until message is attested
   Solana:     receive message -> mint USDC -> deposit to staking pool
 
@@ -43,7 +43,12 @@ logger = logging.getLogger("investments.bridge")
 # CCTP Contract Addresses (Mainnet)
 # ---------------------------------------------------------------------------
 
-# Base (EVM) side
+# TODO(v2): Update CCTP addresses from Base to Ethereum mainnet when enabling bridge.
+# These are Base chain addresses — must be replaced with Ethereum mainnet equivalents.
+# Ethereum CCTP TokenMessenger: 0xBd3fa81B58Ba92a82136038B25aDec7066af3155
+# Ethereum CCTP MessageTransmitter: 0x0a992d191DEeC32aFe36203Ad87D7d289a738F81
+# Ethereum USDC: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+# Ethereum CCTP domain: 0
 BASE_TOKEN_MESSENGER = "0x1682Ae6375C4E4A97e4B583BC394c861A46D8962"
 BASE_MESSAGE_TRANSMITTER = "0xAD09780d193884d503182aD4F75D22B7d6f36EFe"
 BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
@@ -54,13 +59,14 @@ SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 
 # Circle CCTP domains
 DOMAIN_SOLANA = 5
-DOMAIN_BASE = 6
+DOMAIN_BASE = 6  # TODO(v2): Change to DOMAIN_ETHEREUM = 0
 
 # Circle Attestation Service
 CIRCLE_ATTESTATION_URL = "https://iris-api.circle.com/attestations/{message_hash}"
 
-# Base chain
-BASE_CHAIN_ID = 8453
+# EVM chain — basket is on Ethereum mainnet (chain ID 1)
+# Bridge code still references Base addresses above (v2 migration needed)
+ETH_CHAIN_ID = 1
 USDC_DECIMALS = 6
 
 # ---------------------------------------------------------------------------
@@ -884,7 +890,7 @@ class BridgeController:
         tx_params: TxParams = {
             "from": self.account.address,
             "nonce": nonce,
-            "chainId": BASE_CHAIN_ID,
+            "chainId": ETH_CHAIN_ID,
             "maxFeePerGas": max_fee,
             "maxPriorityFeePerGas": max_priority_fee,
         }

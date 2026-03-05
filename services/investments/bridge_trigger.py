@@ -240,13 +240,13 @@ class BridgeTrigger:
             return await self._get_accrued_fees_from_db()
 
     async def get_base_gas_price(self) -> float:
-        """Get the current gas price on Base chain in gwei.
+        """Get the current gas price on Ethereum mainnet in gwei.
 
         Uses the EIP-1559 base fee from the latest block header, which is
-        the most accurate representation of current gas costs on Base.
+        the most accurate representation of current gas costs.
 
         Returns:
-            Gas price in gwei (e.g. 0.01 for typical Base conditions).
+            Gas price in gwei (e.g. 15-30 for typical Ethereum conditions).
         """
         try:
             latest_block = await self.w3.eth.get_block("latest")

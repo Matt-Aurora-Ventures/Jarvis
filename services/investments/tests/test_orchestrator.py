@@ -19,7 +19,6 @@ _MOCK_MODULES = [
     "redis", "redis.asyncio",
     "anthropic",
     "openai",
-    "httpx",
 ]
 for _mod in _MOCK_MODULES:
     if _mod not in sys.modules:

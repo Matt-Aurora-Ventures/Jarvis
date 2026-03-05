@@ -41,10 +41,10 @@ class FallbackOrchestrator:
         self._basket_tokens = {
             "ALVA": {"weight": 0.10, "price_usd": 0.50, "liquidity_usd": 200_000},
             "WETH": {"weight": 0.25, "price_usd": 3200.0, "liquidity_usd": 5_000_000},
-            "cbBTC": {"weight": 0.20, "price_usd": 95_000.0, "liquidity_usd": 3_000_000},
+            "WBTC": {"weight": 0.20, "price_usd": 95_000.0, "liquidity_usd": 3_000_000},
             "USDC": {"weight": 0.15, "price_usd": 1.0, "liquidity_usd": 50_000_000},
-            "AERO": {"weight": 0.15, "price_usd": 1.80, "liquidity_usd": 500_000},
-            "DEGEN": {"weight": 0.15, "price_usd": 0.012, "liquidity_usd": 300_000},
+            "UNI": {"weight": 0.15, "price_usd": 12.50, "liquidity_usd": 2_000_000},
+            "LINK": {"weight": 0.15, "price_usd": 18.0, "liquidity_usd": 1_500_000},
         }
         self._nav_usd = 200.0
         self._decisions: list[dict[str, Any]] = []
@@ -86,7 +86,7 @@ class FallbackOrchestrator:
     async def get_reflections(self, limit: int = 10) -> list[dict[str, Any]]:
         return list(reversed(self._reflections))[: max(1, int(limit))]
 
-    async def run_cycle(self) -> dict[str, Any]:
+    async def run_cycle(self, trigger_type: str = "scheduled") -> dict[str, Any]:
         ts = _utc_now()
         if await self.safety.is_killed():
             return {"status": "killed", "ts": ts.isoformat()}

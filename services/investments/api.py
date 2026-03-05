@@ -266,7 +266,7 @@ async def get_reflections(
 @app.post("/api/investments/trigger-cycle", dependencies=[Depends(require_admin)])
 async def trigger_cycle() -> dict:
     """Manually trigger an investment cycle. Use with caution."""
-    result = await _orchestrator.run_cycle()
+    result = await _orchestrator.run_cycle(trigger_type="manual")
     return result
 
 

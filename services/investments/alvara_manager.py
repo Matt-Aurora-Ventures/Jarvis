@@ -1,6 +1,6 @@
-"""Alvara ERC-7621 Basket Manager — reads/writes an on-chain basket on Base.
+"""Alvara ERC-7621 Basket Manager — reads/writes an on-chain basket on Ethereum.
 
-Connects via web3.py (v7+ async) to Base chain.  Supports:
+Connects via web3.py (v7+ async) to Ethereum mainnet.  Supports:
   - get_basket_state()       -> token addresses, weights, NAV in USD
   - rebalance(new_weights)   -> calls rebalance(address[], uint256[]) on basket
   - get_management_fee_accrued() -> reads accrued management fees
@@ -28,9 +28,9 @@ from services.investments.config import InvestmentConfig
 logger = logging.getLogger("investments.alvara")
 
 # ---------------------------------------------------------------------------
-# Base chain constants
+# Ethereum mainnet constants
 # ---------------------------------------------------------------------------
-BASE_CHAIN_ID = 8453
+ETH_CHAIN_ID = 1
 
 # ---------------------------------------------------------------------------
 # Minimal ERC-7621 ABI (only the functions we call / read)
@@ -129,7 +129,7 @@ _DEXSCREENER_BASE_URL = "https://api.dexscreener.com/latest/dex/tokens"
 
 
 class AlvaraManager:
-    """Manages an ERC-7621 basket contract on Base chain."""
+    """Manages an ERC-7621 basket contract on Ethereum mainnet."""
 
     def __init__(self, cfg: InvestmentConfig) -> None:
         self.cfg = cfg
@@ -229,7 +229,7 @@ class AlvaraManager:
             balance = balance_raw / (10**decimals)
             weight = weight_bp / 10_000  # basis points -> fraction
 
-            # Price from DexScreener (Base chain)
+            # Price from DexScreener (Ethereum mainnet)
             price_usd, liquidity_usd = await self._get_price(addr)
 
             value_usd = balance * price_usd
@@ -262,7 +262,7 @@ class AlvaraManager:
         return symbol, decimals, balance_raw
 
     async def _get_price(self, token_address: str) -> tuple[float, float]:
-        """Fetch price_usd and liquidity_usd for a token on Base from DexScreener.
+        """Fetch price_usd and liquidity_usd for a token on Ethereum from DexScreener.
 
         Returns (price_usd, liquidity_usd). Falls back to (0.0, 0.0) on error.
         """
@@ -278,24 +278,24 @@ class AlvaraManager:
                 data = await resp.json()
 
             pairs = data.get("pairs") or []
-            # Filter for Base chain pairs and pick the one with highest liquidity
-            base_pairs = [
+            # Filter for Ethereum mainnet pairs and pick the one with highest liquidity
+            eth_pairs = [
                 p
                 for p in pairs
-                if p.get("chainId") == "base"
+                if p.get("chainId") == "ethereum"
                 and p.get("priceUsd") is not None
             ]
-            if not base_pairs:
+            if not eth_pairs:
                 # Fall back to any pair
-                base_pairs = [p for p in pairs if p.get("priceUsd") is not None]
+                eth_pairs = [p for p in pairs if p.get("priceUsd") is not None]
 
-            if not base_pairs:
+            if not eth_pairs:
                 logger.warning("No DexScreener pairs for %s", token_address)
                 return 0.0, 0.0
 
             # Sort by liquidity descending and take the best
             best = max(
-                base_pairs,
+                eth_pairs,
                 key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0),
             )
             price_usd = float(best.get("priceUsd", 0))
@@ -450,7 +450,7 @@ class AlvaraManager:
         tx_params: TxParams = {
             "from": self.account.address,
             "nonce": nonce,
-            "chainId": BASE_CHAIN_ID,
+            "chainId": ETH_CHAIN_ID,
             "maxFeePerGas": max_fee,
             "maxPriorityFeePerGas": max_priority_fee,
         }
