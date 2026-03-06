@@ -81,7 +81,7 @@ gcloud run deploy $Service `
   --allow-unauthenticated `
   --port 8080 `
   --set-env-vars $envVars `
-  --set-secrets "XAI_API_KEY=$XaiApiKeySecret:latest" `
+  --set-secrets "XAI_API_KEY=${XaiApiKeySecret}:latest" `
   --quiet | Out-Null
 if ($LASTEXITCODE -ne 0) {
   throw "[investments] Cloud Run deploy failed"

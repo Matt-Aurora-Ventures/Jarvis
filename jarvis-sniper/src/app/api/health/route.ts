@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
+import { isInvestmentsEnabled, isPerpsEnabled } from '@/lib/investments-perps-flags';
 
 /**
  * Health check endpoint for production monitoring.
@@ -122,6 +123,8 @@ async function checkUpstream(base: string | null, path: string): Promise<Upstrea
 }
 
 export async function GET(request: Request) {
+  const perpsEnabled = isPerpsEnabled();
+  const investmentsEnabled = isInvestmentsEnabled();
   const rpcConfig = resolveServerRpcConfig();
   const xaiConfigured = String(process.env.XAI_API_KEY || '').trim().length > 0;
   const xaiBatchEnabled = String(process.env.XAI_BATCH_ENABLED || 'false').toLowerCase() === 'true';
@@ -188,11 +191,12 @@ export async function GET(request: Request) {
     checks.status = 'degraded';
   }
 
-  if (!perpsUpstream.configured || !investmentsUpstream.configured) {
+  if ((perpsEnabled && !perpsUpstream.configured) || (investmentsEnabled && !investmentsUpstream.configured)) {
     checks.status = 'degraded';
   }
 
-  if ((perpsUpstream.configured && !perpsUpstream.ok) || (investmentsUpstream.configured && !investmentsUpstream.ok)) {
+  if ((perpsEnabled && perpsUpstream.configured && !perpsUpstream.ok)
+    || (investmentsEnabled && investmentsUpstream.configured && !investmentsUpstream.ok)) {
     checks.status = 'degraded';
   }
 

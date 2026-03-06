@@ -104,4 +104,24 @@ describe('GET /api/health backend.cloudRunTagUrl', () => {
     expect(body.upstreams.perps.configured).toBe(false);
     expect(body.upstreams.investments.configured).toBe(false);
   });
+
+  it('does not degrade for intentionally disabled surfaces', async () => {
+    process.env.BAGS_API_KEY = 'configured';
+    process.env.NEXT_PUBLIC_ENABLE_PERPS = 'false';
+    process.env.NEXT_PUBLIC_ENABLE_INVESTMENTS = 'true';
+    process.env.INVESTMENTS_SERVICE_BASE_URL = 'https://investments.internal';
+
+    const mockFetch = vi.mocked(fetch);
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    const route = await import('@/app/api/health/route');
+    const res = await route.GET(new Request('http://localhost/api/health'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('ok');
+    expect(body.upstreams.perps.configured).toBe(false);
+    expect(body.upstreams.investments.configured).toBe(true);
+    expect(body.upstreams.investments.ok).toBe(true);
+  });
 });

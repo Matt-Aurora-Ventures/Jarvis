@@ -10,11 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements-investments.txt .
 RUN pip install --no-cache-dir -r requirements-investments.txt
 
-COPY . .
+COPY services/investments ./services/investments
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8770
+EXPOSE 8080
 
 CMD ["python", "-m", "services.investments.main"]
