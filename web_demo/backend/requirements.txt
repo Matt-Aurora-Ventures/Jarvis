@@ -44,7 +44,7 @@ tenacity==8.2.3  # Retry logic
 
 # Monitoring & Logging
 prometheus-client==0.19.0
-sentry-sdk[fastapi]==1.40.0
+sentry-sdk[fastapi]==1.45.1
 
 # Development
 pytest==7.4.4
