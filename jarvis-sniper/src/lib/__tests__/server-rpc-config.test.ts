@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolveServerRpcConfig } from '@/lib/server-rpc-config';
 
-const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+const ORIGINAL_NODE_ENV = (process.env as any).NODE_ENV;
 const ORIGINAL_GATEKEEPER = process.env.HELIUS_GATEKEEPER_RPC_URL;
 const ORIGINAL_SERVER_RPC = process.env.SOLANA_RPC_URL;
 const ORIGINAL_PUBLIC_RPC = process.env.NEXT_PUBLIC_SOLANA_RPC;
 
 function restoreEnv() {
-  process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+  (process.env as any).NODE_ENV = ORIGINAL_NODE_ENV;
   if (ORIGINAL_GATEKEEPER === undefined) {
     delete process.env.HELIUS_GATEKEEPER_RPC_URL;
   } else {
@@ -31,7 +31,7 @@ afterEach(() => {
 
 describe('server-rpc-config', () => {
   it('fails closed in production when no RPC URL is configured', () => {
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     delete process.env.HELIUS_GATEKEEPER_RPC_URL;
     delete process.env.SOLANA_RPC_URL;
     delete process.env.NEXT_PUBLIC_SOLANA_RPC;
@@ -42,7 +42,7 @@ describe('server-rpc-config', () => {
   });
 
   it('fails in production when RPC host is not Helius', () => {
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     delete process.env.HELIUS_GATEKEEPER_RPC_URL;
     process.env.SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
 
@@ -52,7 +52,7 @@ describe('server-rpc-config', () => {
   });
 
   it('passes in production with Helius Gatekeeper URL and sanitizes api-key in diagnostics', () => {
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     process.env.HELIUS_GATEKEEPER_RPC_URL = 'https://beta.helius-rpc.com/?api-key=secret-key-value';
     process.env.SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
 
@@ -64,7 +64,7 @@ describe('server-rpc-config', () => {
   });
 
   it('allows development fallback path when no server URL is set', () => {
-    process.env.NODE_ENV = 'development';
+    (process.env as any).NODE_ENV = 'development';
     delete process.env.HELIUS_GATEKEEPER_RPC_URL;
     delete process.env.SOLANA_RPC_URL;
     delete process.env.NEXT_PUBLIC_SOLANA_RPC;

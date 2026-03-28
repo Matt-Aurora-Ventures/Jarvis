@@ -42,6 +42,7 @@ const baseConfig: SniperConfig = {
     xstock: { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
     index: { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
     prestock: { maxConsecutiveLosses: 9, maxDailyLossSol: 0.3, cooldownMinutes: 15 },
+    established: { maxConsecutiveLosses: 12, maxDailyLossSol: 0.5, cooldownMinutes: 20 },
   },
 };
 

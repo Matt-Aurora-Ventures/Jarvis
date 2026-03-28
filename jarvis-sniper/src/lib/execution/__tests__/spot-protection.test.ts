@@ -42,7 +42,7 @@ describe('spot-protection adapter lifecycle', () => {
     if (rootDir && existsSync(rootDir)) {
       rmSync(rootDir, { recursive: true, force: true });
     }
-    process.env.NODE_ENV = envSnapshot.NODE_ENV;
+    (process.env as any).NODE_ENV = envSnapshot.NODE_ENV;
     process.env.JARVIS_SPOT_PROTECTION_ROOT = envSnapshot.JARVIS_SPOT_PROTECTION_ROOT;
     process.env.SPOT_PROTECTION_LOCAL_MODE = envSnapshot.SPOT_PROTECTION_LOCAL_MODE;
     process.env.SPOT_PROTECTION_PROVIDER_URL = envSnapshot.SPOT_PROTECTION_PROVIDER_URL;
