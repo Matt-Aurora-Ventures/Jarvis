@@ -12,6 +12,7 @@ import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { Buffer } from 'buffer';
 import { waitForSignatureStatus } from '@/lib/tx-confirmation';
 import { withTimeout } from '@/lib/async-timeout';
+import { simulateSwap } from '@/lib/simulate';
 
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const SOL_DECIMALS = 9;
@@ -182,10 +183,21 @@ export async function executeSwap(
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
     transaction.message.recentBlockhash = blockhash;
 
-    // 4. Sign with fresh blockhash (tx is unsigned from server, safe to mutate)
+    // 4. Pre-flight simulation — catch on-chain failures before user signs
+    const sim = await simulateSwap(connection, transaction);
+    if (!sim.ok) {
+      const failureCode = normalizeFailureCode(sim.error) || 'onchain_failed';
+      return {
+        success: false, inputAmount: amountSol, outputAmount: 0, priceImpact: 0,
+        error: sim.error || 'Pre-flight simulation failed',
+        failureCode, failureDetail: sim.error, timestamp,
+      };
+    }
+
+    // 5. Sign with fresh blockhash (tx is unsigned from server, safe to mutate)
     const signedTx = await signTransaction(transaction);
 
-    // 5. Send to network
+    // 6. Send to network
     let txHash: string;
     if (useJito) {
       txHash = await sendWithJito(signedTx, connection);
@@ -196,7 +208,7 @@ export async function executeSwap(
       });
     }
 
-    // 6. Confirm with blockhash-based polling (HTTP, no WebSocket needed)
+    // 7. Confirm with blockhash-based polling + WSS race
     const confirmResult = await confirmWithFallback(connection, txHash, blockhash, lastValidBlockHeight);
     if (confirmResult.state === 'failed') {
       const detail = confirmResult.errorDetail || 'On-chain failure';
@@ -347,6 +359,18 @@ export async function executeSwapFromQuote(
     // Replace stale server blockhash with a fresh one (same fix as buy flow)
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
     transaction.message.recentBlockhash = blockhash;
+
+    // Pre-flight simulation — catch on-chain failures before user signs
+    const sim = await simulateSwap(connection, transaction);
+    if (!sim.ok) {
+      const failureCode = normalizeFailureCode(sim.error) || 'onchain_failed';
+      return {
+        success: false, inputAmount: 0, outputAmount: 0,
+        priceImpact: parseFloat(quote.priceImpactPct || '0'),
+        error: sim.error || 'Pre-flight simulation failed',
+        failureCode, failureDetail: sim.error, timestamp,
+      };
+    }
 
     // Sign with fresh blockhash
     const signedTx = await signTransaction(transaction);

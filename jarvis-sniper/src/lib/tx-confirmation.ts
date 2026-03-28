@@ -46,6 +46,99 @@ export function mapRpcStatusToPendingState(status: SignatureStatus | null): Sign
   return toResult(status);
 }
 
+/**
+ * Race a WebSocket `signatureSubscribe` against HTTP polling for faster confirmation.
+ * The WSS subscription pushes confirmation status ~400ms vs 2.5s poll intervals.
+ * If WSS fails to connect, polling continues as the sole mechanism.
+ */
+function raceSignatureSubscribe(
+  signature: string,
+  maxWaitMs: number,
+): { promise: Promise<SignatureStatusResult | null>; cancel: () => void } {
+  let ws: WebSocket | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
+
+  // Use the same WS URL the Connection would use
+  const wsUrl =
+    typeof window !== 'undefined'
+      ? (process.env.NEXT_PUBLIC_SOLANA_WS ||
+          process.env.NEXT_PUBLIC_SOLANA_RPC?.replace('https://', 'wss://').replace('http://', 'ws://') ||
+          'wss://api.mainnet-beta.solana.com')
+      : '';
+
+  const promise = new Promise<SignatureStatusResult | null>((resolve) => {
+    if (!wsUrl || typeof WebSocket === 'undefined') {
+      resolve(null); // No WSS available, let polling handle it
+      return;
+    }
+
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      resolve(null);
+      return;
+    }
+
+    timeoutId = setTimeout(() => {
+      resolve(null);
+      ws?.close();
+    }, maxWaitMs);
+
+    ws.onopen = () => {
+      if (cancelled) { ws?.close(); return; }
+      ws?.send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'signatureSubscribe',
+          params: [signature, { commitment: 'confirmed' }],
+        }),
+      );
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data as string);
+        // Subscription confirmation — ignore
+        if (msg.result !== undefined && !msg.params) return;
+        // Actual notification
+        const value = msg.params?.result?.value;
+        if (value !== undefined) {
+          if (value?.err) {
+            resolve({
+              state: 'failed',
+              error: typeof value.err === 'string' ? value.err : JSON.stringify(value.err),
+            });
+          } else {
+            resolve({ state: 'confirmed', confirmationStatus: 'confirmed' });
+          }
+          ws?.close();
+        }
+      } catch {
+        // Ignore malformed
+      }
+    };
+
+    ws.onerror = () => {
+      resolve(null); // Let polling handle it
+      ws?.close();
+    };
+
+    ws.onclose = () => {
+      if (!cancelled) resolve(null);
+    };
+  });
+
+  const cancel = () => {
+    cancelled = true;
+    if (timeoutId) clearTimeout(timeoutId);
+    ws?.close();
+  };
+
+  return { promise, cancel };
+}
+
 export async function waitForSignatureStatus(
   connection: Connection,
   signature: string,
@@ -57,17 +150,39 @@ export async function waitForSignatureStatus(
   const maxWaitMs = Math.max(1_000, options?.maxWaitMs ?? DEFAULT_MAX_WAIT_MS);
   const pollMs = Math.max(500, options?.pollMs ?? DEFAULT_POLL_MS);
 
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < maxWaitMs) {
-    const statuses = await connection.getSignatureStatuses([signature], {
-      searchTransactionHistory: true,
-    });
-    const result = toResult(statuses?.value?.[0] ?? null);
-    if (result.state === 'confirmed' || result.state === 'failed') return result;
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  // Start WSS subscription race (non-blocking — resolves null if WSS unavailable)
+  const wssRace = raceSignatureSubscribe(signature, maxWaitMs);
+
+  // Polling loop (existing behavior)
+  const pollingPromise = (async (): Promise<SignatureStatusResult> => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < maxWaitMs) {
+      const statuses = await connection.getSignatureStatuses([signature], {
+        searchTransactionHistory: true,
+      });
+      const result = toResult(statuses?.value?.[0] ?? null);
+      if (result.state === 'confirmed' || result.state === 'failed') return result;
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return { state: 'unresolved', error: `No final signature status within ${maxWaitMs}ms` };
+  })();
+
+  // Race: whichever resolves first with a definitive result wins.
+  const wssResult = await Promise.race([
+    wssRace.promise,
+    pollingPromise.then((r) => {
+      wssRace.cancel();
+      return r;
+    }),
+  ]);
+
+  // If WSS gave a definitive answer first, return it
+  if (wssResult && (wssResult.state === 'confirmed' || wssResult.state === 'failed')) {
+    return wssResult;
   }
 
-  return { state: 'unresolved', error: `No final signature status within ${maxWaitMs}ms` };
+  // Otherwise wait for polling result
+  return pollingPromise;
 }
 
 export async function reconcileSignatureStatuses(

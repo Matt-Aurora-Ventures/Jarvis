@@ -37,8 +37,11 @@ export function getRandomTipAccount(): PublicKey {
   return JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
 }
 
-/** Default tip: 0.001 SOL — enough for fast inclusion */
+/** Default tip: 0.001 SOL — static fallback for fast inclusion */
 export const DEFAULT_TIP_LAMPORTS = 1_000_000;
+
+/** Dynamic tip floor from Jito API (60s cache, falls back to DEFAULT_TIP_LAMPORTS) */
+export { getJitoTipFloor } from '@/lib/jito-tip';
 
 /** Max transactions per Jito bundle (5 total: 4 swaps + 1 tip) */
 export const MAX_BUNDLE_SIZE = 5;

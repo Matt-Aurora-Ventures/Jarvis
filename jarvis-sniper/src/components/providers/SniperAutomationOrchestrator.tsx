@@ -11,6 +11,9 @@ import { useSnipeExecutor } from '@/hooks/useSnipeExecutor';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { usePnlTracker } from '@/hooks/usePnlTracker';
 import { usePositionReconciliation } from '@/hooks/usePositionReconciliation';
+import { usePumpPortalStream } from '@/hooks/usePumpPortalStream';
+import { useLogsSubscribe } from '@/hooks/useLogsSubscribe';
+import { DATA_SOURCE } from '@/lib/data-source-config';
 import { filterTradeManagedOpenPositionsForActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import type { BagsGraduation } from '@/lib/bags-api';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
@@ -20,6 +23,7 @@ import {
   scopeAllowsAsset,
   selectBestWrGateStrategy,
 } from '@/lib/auto-wr-gate';
+import { buildStrategyLifecycleMap } from '@/lib/strategy-lifecycle';
 import { selectStrategyWithThompson } from '@/lib/strategy-selector';
 import { mergeRuntimeConfigWithStrategyOverride } from '@/lib/autonomy/override-policy';
 
@@ -116,6 +120,10 @@ export function SniperAutomationOrchestrator() {
   usePnlTracker();
   // Reconcile stale/phantom local positions against on-chain state, route-independently.
   usePositionReconciliation();
+  // Real-time WebSocket feeds for sub-second token discovery (VoxForge upgrade).
+  // Only one activates based on NEXT_PUBLIC_DATA_SOURCE (pumpportal | logs-subscribe | poll-only).
+  usePumpPortalStream();
+  useLogsSubscribe();
 
   const autoCycleInFlightRef = useRef(false);
   const nextAutoAllowedAtRef = useRef(0);
@@ -150,11 +158,24 @@ export function SniperAutomationOrchestrator() {
     return [...byMint.values()];
   }, [graduations]);
 
+  const lifecycleById = useMemo(
+    () => buildStrategyLifecycleMap({
+      presets: STRATEGY_PRESETS,
+      backtestMeta,
+      positions,
+    }),
+    [backtestMeta, positions],
+  );
+
   const wrGateSelection = useMemo(() => {
     if (!config.autoWrGateEnabled) return null;
-    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, backtestMeta, config.autoWrScope);
+    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, backtestMeta, config.autoWrScope, {
+      assetType: assetFilter,
+      lifecycleById,
+    });
     return selectBestWrGateStrategy(candidates, config);
   }, [
+    assetFilter,
     backtestMeta,
     config.autoWrFallbackPct,
     config.autoWrGateEnabled,
@@ -162,6 +183,7 @@ export function SniperAutomationOrchestrator() {
     config.autoWrMinTrades,
     config.autoWrPrimaryPct,
     config.autoWrScope,
+    lifecycleById,
   ]);
 
   const runtimeConfig = useMemo(
@@ -201,7 +223,9 @@ export function SniperAutomationOrchestrator() {
   // Persistent feed refresh — decoupled from page components so automation survives route switches.
   useEffect(() => {
     let cancelled = false;
-    const FEED_REFRESH_MS = 30_000;
+    // When a WebSocket feed is active (pumpportal/logs-subscribe), REST polling
+    // becomes a fallback enrichment source — reduce interval from 30s to 15s.
+    const FEED_REFRESH_MS = DATA_SOURCE !== 'poll-only' ? 15_000 : 30_000;
     const switchedAsset = activeFeedAssetRef.current !== assetFilter;
     let firstRefreshAfterSwitch = switchedAsset;
     activeFeedAssetRef.current = assetFilter;
