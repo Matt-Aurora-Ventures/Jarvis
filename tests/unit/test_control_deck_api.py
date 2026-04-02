@@ -3,7 +3,7 @@ import pytest
 
 def test_control_deck_actions_endpoint():
     pytest.importorskip("flask")
-    from web.task_web import app
+    from services.web.task_web import app
 
     client = app.test_client()
     response = client.get("/api/actions")

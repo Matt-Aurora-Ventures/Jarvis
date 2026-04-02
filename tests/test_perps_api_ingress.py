@@ -6,7 +6,7 @@ import urllib.error
 import pytest
 from flask import Flask
 
-import web.perps_api as perps_api
+import services.web.perps_api as perps_api
 
 
 @pytest.fixture
