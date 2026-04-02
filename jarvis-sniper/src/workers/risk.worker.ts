@@ -32,7 +32,13 @@ type SyncMessage = {
 
 type StopMessage = { type: 'STOP' };
 
-type Incoming = SyncMessage | StopMessage;
+/** Injected prices from DexPaprika SSE on the main thread. */
+type PriceInjectMessage = {
+  type: 'PRICE_INJECT';
+  prices: Record<string, number>;
+};
+
+type Incoming = SyncMessage | StopMessage | PriceInjectMessage;
 
 type PriceUpdate = { id: string; mint: string; priceUsd: number; pnlPct: number; hwmPct: number };
 
@@ -41,6 +47,10 @@ let intervalMs = 1500;
 let timer: number | null = null;
 
 const triggered = new Map<string, { trigger: TriggerType; at: number }>();
+
+/** Prices injected from DexPaprika SSE on the main thread. */
+const injectedPrices: Record<string, { price: number; at: number }> = {};
+const INJECT_STALE_MS = 5_000; // Consider injected price stale after 5s
 
 // Jupiter's paid `api.jup.ag` now requires an API key for many endpoints.
 // Use the free, CORS-friendly lite endpoint for client-side price polling.
@@ -81,6 +91,19 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
       start();
       void tick(); // immediate run
     }
+  }
+
+  if (msg.type === 'PRICE_INJECT') {
+    // Accept prices from DexPaprika SSE on the main thread.
+    // These are used immediately for trigger computation — no waiting for next fetch.
+    const now = Date.now();
+    for (const [mint, price] of Object.entries(msg.prices)) {
+      if (typeof price === 'number' && price > 0) {
+        injectedPrices[mint] = { price, at: now };
+      }
+    }
+    // Run trigger computation immediately with injected prices
+    void tickWithPrices(msg.prices);
   }
 };
 
@@ -155,12 +178,29 @@ async function fetchDexScreenerPrices(mints: string[]): Promise<Record<string, n
 }
 
 async function fetchPrices(mints: string[]): Promise<Record<string, number>> {
-  // Prefer Jupiter (fast, cheap). Fallback to DexScreener for missing tokens.
-  const jup = await fetchJupiterPrices(mints);
-  const missing = mints.filter((m) => jup[m] == null);
-  if (missing.length === 0) return jup;
-  const dex = await fetchDexScreenerPrices(missing);
-  return { ...jup, ...dex };
+  const now = Date.now();
+
+  // 1. Use fresh injected prices from DexPaprika SSE (if available and <5s old)
+  const fromInjected: Record<string, number> = {};
+  const needFetch: string[] = [];
+  for (const mint of mints) {
+    const inj = injectedPrices[mint];
+    if (inj && now - inj.at < INJECT_STALE_MS) {
+      fromInjected[mint] = inj.price;
+    } else {
+      needFetch.push(mint);
+    }
+  }
+
+  // If all prices came from SSE, skip REST entirely
+  if (needFetch.length === 0) return fromInjected;
+
+  // 2. Fetch remaining from Jupiter + DexScreener
+  const jup = await fetchJupiterPrices(needFetch);
+  const stillMissing = needFetch.filter((m) => jup[m] == null);
+  const dex = stillMissing.length > 0 ? await fetchDexScreenerPrices(stillMissing) : {};
+
+  return { ...fromInjected, ...jup, ...dex };
 }
 
 function computeTrigger(pos: WorkerPosition, pnlPct: number, hwmPct: number, now: number): TriggerType | null {
@@ -177,6 +217,42 @@ function computeTrigger(pos: WorkerPosition, pnlPct: number, hwmPct: number, now
 
   // Priority: TP > Trail > Expiry > SL (matches main UI semantics)
   return hitTp ? 'tp_hit' : hitTrail ? 'trail_stop' : hitExpiry ? 'expired' : 'sl_hit';
+}
+
+/** Run trigger computation with pre-supplied prices (from PRICE_INJECT). */
+async function tickWithPrices(prices: Record<string, number>) {
+  if (positions.length === 0) return;
+  const now = Date.now();
+
+  const updates: PriceUpdate[] = [];
+  const triggers: Array<{ id: string; mint: string; trigger: TriggerType; pnlPct: number; priceUsd: number; hwmPct: number }> = [];
+
+  for (const pos of positions) {
+    const priceUsd = prices[pos.mint];
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0) continue;
+    if (!Number.isFinite(pos.entryPriceUsd) || pos.entryPriceUsd <= 0) continue;
+
+    const pnlPct = ((priceUsd - pos.entryPriceUsd) / pos.entryPriceUsd) * 100;
+    const hwmPct = Math.max(pos.hwmPct || 0, pnlPct);
+
+    updates.push({ id: pos.id, mint: pos.mint, priceUsd, pnlPct, hwmPct });
+
+    const trigger = computeTrigger(pos, pnlPct, hwmPct, now);
+    if (!trigger) continue;
+
+    const prev = triggered.get(pos.id);
+    if (prev && prev.trigger === trigger && now - prev.at < 15_000) continue;
+
+    triggered.set(pos.id, { trigger, at: now });
+    triggers.push({ id: pos.id, mint: pos.mint, trigger, pnlPct, priceUsd, hwmPct });
+  }
+
+  if (updates.length > 0) {
+    self.postMessage({ type: 'PRICE_UPDATE', updates });
+  }
+  for (const t of triggers) {
+    self.postMessage({ type: 'TRIGGER', ...t });
+  }
 }
 
 async function tick() {

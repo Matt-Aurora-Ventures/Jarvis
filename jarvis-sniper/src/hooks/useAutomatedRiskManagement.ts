@@ -10,7 +10,11 @@ import { closeEmptyTokenAccountsForMint, loadSessionWalletByPublicKey, loadSessi
 import { isBlueChipLongConvictionSymbol } from '@/lib/trade-plan';
 import { filterOpenPositionsForActiveWallet, isPositionInActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
+import { PRICE_STREAM_MODE } from '@/lib/price-stream-config';
+
 const WORKER_INTERVAL_MS = 1500;
+/** When SSE is active, slow the worker's own REST fetching. */
+const WORKER_SSE_INTERVAL_MS = 10_000;
 
 type TriggerType = 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired';
 
@@ -140,7 +144,7 @@ export function useAutomatedRiskManagement() {
     worker.postMessage({
       type: 'SYNC',
       positions: workerPositions,
-      intervalMs: WORKER_INTERVAL_MS,
+      intervalMs: PRICE_STREAM_MODE === 'dexpaprika' ? WORKER_SSE_INTERVAL_MS : WORKER_INTERVAL_MS,
     });
   }, [positions, config, tradeSignerMode, sessionWalletPubkey, address]);
 

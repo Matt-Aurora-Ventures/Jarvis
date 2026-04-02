@@ -63,6 +63,22 @@ export async function POST(request: Request) {
     positionId,
     mint,
     status,
+    learningClass:
+      body?.learningClass === 'strategy'
+        ? 'strategy'
+        : body?.learningClass === 'execution'
+          ? 'execution'
+          : body?.learningClass === 'infra'
+            ? 'infra'
+            : undefined,
+    confirmationState:
+      body?.confirmationState === 'confirmed'
+        ? 'confirmed'
+        : body?.confirmationState === 'failed'
+          ? 'failed'
+          : body?.confirmationState === 'unresolved'
+            ? 'unresolved'
+            : undefined,
     symbol: asString(body?.symbol).trim() || undefined,
     walletAddress: asString(body?.walletAddress).trim() || undefined,
     strategyId: asString(body?.strategyId).trim() || null,

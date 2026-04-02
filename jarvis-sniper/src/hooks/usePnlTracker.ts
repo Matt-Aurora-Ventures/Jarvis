@@ -5,15 +5,16 @@ import { useSniperStore } from '@/stores/useSniperStore';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { filterOpenPositionsForActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 
+import { PRICE_STREAM_MODE, SSE_ACTIVE_POLL_MS, DEFAULT_POLL_MS } from '@/lib/price-stream-config';
+
 const DEXSCREENER_TOKENS = 'https://api.dexscreener.com/tokens/v1/solana';
-const POLL_INTERVAL_MS = 3000;
 const MAX_CONSECUTIVE_ERRORS = 10;
 const BASE_BACKOFF_MS = 3_000;
 
 /**
- * Polls DexScreener batch API every 3s to update open position prices.
- * Batches up to 30 token addresses per request (DexScreener limit).
- * Updates the store's positions with currentPrice, pnlPercent, pnlSol.
+ * Polls DexScreener batch API to update open position prices.
+ * When DexPaprika SSE is active (NEXT_PUBLIC_PRICE_STREAM=dexpaprika),
+ * polling slows to 15s as a fallback. Otherwise polls every 3s.
  */
 export function usePnlTracker() {
   const { address } = usePhantomWallet();
@@ -120,11 +121,13 @@ export function usePnlTracker() {
         isPollingRef.current = false;
       }
 
-      // Schedule next poll with exponential backoff on consecutive errors
+      // Schedule next poll with exponential backoff on consecutive errors.
+      // When DexPaprika SSE is active, this is just a fallback (15s).
       if (!mounted) return;
+      const pollMs = PRICE_STREAM_MODE === 'dexpaprika' ? SSE_ACTIVE_POLL_MS : DEFAULT_POLL_MS;
       const backoff = errorCountRef.current > 0
-        ? Math.min(BASE_BACKOFF_MS * Math.pow(2, errorCountRef.current - 1), POLL_INTERVAL_MS * 10)
-        : POLL_INTERVAL_MS;
+        ? Math.min(BASE_BACKOFF_MS * Math.pow(2, errorCountRef.current - 1), pollMs * 10)
+        : pollMs;
       timeoutRef.current = setTimeout(fetchPrices, backoff);
     };
 

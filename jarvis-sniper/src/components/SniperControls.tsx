@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from 'react';
 import { Buffer } from 'buffer';
-import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check, Gem, Rocket, Clock, HelpCircle, Package, X } from 'lucide-react';
+import { Settings, Zap, Shield, Target, TrendingUp, ChevronDown, ChevronUp, Crosshair, AlertTriangle, Wallet, Lock, Unlock, DollarSign, Loader2, Send, Flame, ShieldCheck, Info, AlertCircle, BarChart3, Trophy, Check, Gem, Rocket, Clock, HelpCircle, Package, X, FlaskConical, Ban } from 'lucide-react';
 import { useSniperStore, makeDefaultAssetBreaker, type SniperConfig, type StrategyMode, type AssetType, type PerAssetBreakerConfig, STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import type { BagsGraduation } from '@/lib/bags-api';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
@@ -24,7 +24,7 @@ import {
   recoverSessionWalletFromAnyStorage,
   sweepToMainWalletAndCloseTokenAccounts,
 } from '@/lib/session-wallet';
-import { STRATEGY_CATEGORIES } from '@/components/strategy-categories';
+import { buildStrategyCategorySections } from '@/components/strategy-categories';
 import { STRATEGY_INFO } from '@/components/strategy-info';
 import { filterOpenPositionsForActiveWallet, filterTradeManagedOpenPositionsForActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import { getConnection as getSharedConnection } from '@/lib/rpc-url';
@@ -33,10 +33,14 @@ import { isProbablyMobile } from '@/lib/wallet-deeplinks';
 import { getSessionWalletCreationMode } from '@/lib/session-wallet-security';
 import {
   buildWrGateCandidates,
-  gateStatusBadge,
   scopeAllowsAsset,
   selectBestWrGateStrategy,
 } from '@/lib/auto-wr-gate';
+import {
+  buildStrategyLifecycleMap,
+  STRATEGY_LIFECYCLE_LABELS,
+  type ResolvedStrategyLifecycle,
+} from '@/lib/strategy-lifecycle';
 
 /**
  * Analyze the current scanner feed and suggest the best strategy preset.
@@ -129,23 +133,16 @@ const LIQUIDITY_PRESETS_USD = [10000, 25000, 40000, 50000];
 
 /** Icon lookup for strategy categories */
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  ShieldCheck: <ShieldCheck className="w-3 h-3" />,
+  FlaskConical: <FlaskConical className="w-3 h-3" />,
+  Rocket: <Rocket className="w-3 h-3" />,
+  Ban: <Ban className="w-3 h-3" />,
   Trophy: <Trophy className="w-3 h-3" />,
   Shield: <Shield className="w-3 h-3" />,
   Zap: <Zap className="w-3 h-3" />,
   BarChart3: <BarChart3 className="w-3 h-3" />,
   Gem: <Gem className="w-3 h-3" />,
   Package: <Package className="w-3 h-3" />,
-};
-
-/** Map asset filter to visible strategy categories */
-const ASSET_CATEGORY_MAP: Record<AssetType, string[]> = {
-  memecoin: ['TOP PERFORMERS', 'MEMECOIN'],
-  established: ['TOP PERFORMERS', 'ESTABLISHED TOKENS'],
-  bags: ['BAGS.FM'],
-  bluechip: ['BLUE CHIP SOLANA'],
-  xstock: ['xSTOCK & INDEX'],
-  prestock: ['xSTOCK & INDEX'],
-  index: ['xSTOCK & INDEX'],
 };
 
 /** Risk level badge colors */
@@ -155,6 +152,32 @@ const RISK_COLORS: Record<string, string> = {
   HIGH: 'text-accent-error/80 bg-accent-error/10 border-accent-error/20',
   EXTREME: 'text-accent-error bg-accent-error/15 border-accent-error/30',
 };
+
+const LIFECYCLE_TONE_CLASSES: Record<ResolvedStrategyLifecycle['lifecycle'], string> = {
+  research: 'bg-blue-500/10 text-blue-300 border-blue-400/20',
+  paper: 'bg-accent-neon/10 text-accent-neon border-accent-neon/20',
+  micro_live: 'bg-emerald-500/10 text-emerald-300 border-emerald-400/20',
+  production: 'bg-emerald-500/15 text-emerald-200 border-emerald-300/30',
+  quarantined: 'bg-accent-warning/10 text-accent-warning border-accent-warning/20',
+  disabled: 'bg-accent-error/10 text-accent-error border-accent-error/20',
+};
+
+function lifecycleChipText(
+  lifecycle: ResolvedStrategyLifecycle | undefined,
+  meta: Record<string, unknown> | undefined,
+): string {
+  if (!lifecycle) return STRATEGY_LIFECYCLE_LABELS.research;
+  const label = STRATEGY_LIFECYCLE_LABELS[lifecycle.lifecycle];
+  const trades = Number(meta?.trades || meta?.totalTrades || 0);
+  const winRate = typeof meta?.winRate === 'string' ? meta.winRate.trim() : '';
+  if (winRate && trades > 0 && (lifecycle.lifecycle === 'paper' || lifecycle.lifecycle === 'micro_live' || lifecycle.lifecycle === 'production')) {
+    return `${label} | ${winRate} (${trades}T)`;
+  }
+  if (lifecycle.confirmedLiveTrades > 0 && (lifecycle.lifecycle === 'micro_live' || lifecycle.lifecycle === 'production')) {
+    return `${label} | ${lifecycle.confirmedLiveTrades} live`;
+  }
+  return label;
+}
 
 /** Small info tooltip component — hover (desktop) or tap (mobile) for explanation */
 function InfoTip({ text }: { text: string }) {
@@ -217,6 +240,10 @@ export function SniperControls() {
   const [isMobileUi, setIsMobileUi] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [strategyOpen, setStrategyOpen] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    research: true,
+    disabled: true,
+  });
   const [strategyDetailsOpen, setStrategyDetailsOpen] = useState(true);
   const [bestEverLoaded, setBestEverLoaded] = useState(false);
   const [customBudget, setCustomBudget] = useState('');
@@ -378,8 +405,27 @@ export function SniperControls() {
     ? Math.round((budget.budgetSol / config.maxConcurrentPositions) * 100) / 100
     : 0;
   const useRecommendedExits = config.useRecommendedExits !== false;
+  const lifecycleById = useMemo(
+    () => buildStrategyLifecycleMap({
+      presets: STRATEGY_PRESETS,
+      backtestMeta: backtestMeta as Record<string, any>,
+      positions,
+    }),
+    [backtestMeta, positions],
+  );
+  const strategySections = useMemo(
+    () => buildStrategyCategorySections({
+      presets: STRATEGY_PRESETS,
+      assetType: assetFilter,
+      backtestMeta: backtestMeta as Record<string, any>,
+      positions,
+      lifecycleById,
+    }),
+    [assetFilter, backtestMeta, lifecycleById, positions],
+  );
   const suggestion = suggestStrategy(graduations as BagsGraduation[], assetFilter);
   const activePresetDef = STRATEGY_PRESETS.find((p) => p.id === activePreset);
+  const activeLifecycle = activePreset ? lifecycleById[activePreset] : undefined;
   const activePresetLabel = activePresetDef?.name || activePreset?.toUpperCase() || 'CUSTOM';
   const wrGatePolicy = `WR Gate: ${Math.round(config.autoWrPrimaryPct)}→${Math.round(config.autoWrFallbackPct)} | ${config.autoWrMethod === 'wilson95_lower' ? 'Wilson95' : 'Point'} | Min ${Math.max(0, Math.floor(config.autoWrMinTrades))}T | PFT primary 50 | Thompson d=0.90`;
   const wrGateScopeActive =
@@ -392,17 +438,28 @@ export function SniperControls() {
       STRATEGY_PRESETS,
       backtestMeta as Record<string, any>,
       config.autoWrScope,
+      {
+        assetType: assetFilter,
+        lifecycleById,
+      },
     );
     return selectBestWrGateStrategy(candidates, config);
   }, [
+    assetFilter,
     backtestMeta,
     config.autoWrFallbackPct,
     config.autoWrMethod,
     config.autoWrMinTrades,
     config.autoWrPrimaryPct,
     config.autoWrScope,
+    lifecycleById,
     wrGateScopeActive,
   ]);
+  const suggestionLifecycle = suggestion ? lifecycleById[suggestion.presetId] : undefined;
+  const suggestionVisible =
+    !!suggestionLifecycle
+    && suggestionLifecycle.lifecycle !== 'disabled'
+    && suggestionLifecycle.lifecycle !== 'quarantined';
 
   const usingSession = tradeSignerMode === 'session';
   const [sessionKeyOk, setSessionKeyOk] = useState(false);
@@ -1386,30 +1443,13 @@ export function SniperControls() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center items-end gap-1.5 flex-shrink-0 max-w-[52%]">
-            {(() => {
-              const meta: any = (backtestMeta as any)?.[activePreset];
-              const wr = meta?.backtested ? String(meta.winRate || '').trim() : '';
-              const trades = meta?.backtested ? Number(meta.trades || 0) : 0;
-              const disabled = !!activePresetDef?.disabled;
-              const under = !!meta?.underperformer || !!activePresetDef?.underperformer;
-              const stageTag =
-                meta?.stage === 'promotion' ? 'S3' :
-                meta?.stage === 'stability' ? 'S2' :
-                meta?.stage === 'sanity' ? 'S1' :
-                '';
-              const promo = !!meta?.promotionEligible;
-              return (
-                <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
-                  (disabled || under)
-                    ? 'bg-accent-error/10 text-accent-error border-accent-error/20'
-                    : wr
-                      ? 'bg-accent-neon/10 text-accent-neon border-accent-neon/20'
-                      : 'bg-bg-tertiary text-text-muted border-border-primary text-[8px]'
-                } max-w-[220px] leading-tight text-right break-words whitespace-normal`}>
-                  {wr ? `${wr}${trades > 0 ? ` (${trades}T${stageTag ? ` ${stageTag}` : ''}${promo ? ' PROMO' : ''})` : ''}` : 'Unverified'}
-                </span>
-              );
-            })()}
+            <span
+              className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border max-w-[220px] leading-tight text-right break-words whitespace-normal ${
+                LIFECYCLE_TONE_CLASSES[activeLifecycle?.lifecycle || 'research']
+              }`}
+            >
+              {lifecycleChipText(activeLifecycle, (backtestMeta as Record<string, any>)?.[activePreset])}
+            </span>
             <ChevronDown className={`w-3.5 h-3.5 text-text-muted transition-transform ${strategyOpen ? 'rotate-180' : ''}`} />
           </div>
         </button>
@@ -1417,115 +1457,95 @@ export function SniperControls() {
         {/* Dropdown panel with categories */}
         {strategyOpen && (
           <div className="mt-1.5 rounded-lg border border-border-primary bg-bg-secondary overflow-hidden animate-fade-in">
-            {STRATEGY_CATEGORIES.filter(c => {
-              const allowed = ASSET_CATEGORY_MAP[assetFilter];
-              return allowed ? allowed.includes(c.label) : true;
-            }).map((category) => (
-              <div key={category.label}>
-                {/* Category header */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-tertiary/50 border-b border-border-primary/50">
-                  <span className="text-text-muted/60">{CATEGORY_ICONS[category.icon]}</span>
-                  <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-text-muted/60">{category.label}</span>
-                </div>
-                {/* Strategy rows */}
-                {category.presetIds.map((presetId) => {
-                  const preset = STRATEGY_PRESETS.find(p => p.id === presetId);
-                  if (!preset) return null;
-                  const isActive = activePreset === preset.id;
-                  const isAggressive = preset.config.strategyMode === 'aggressive';
-                  const isSuggested = suggestion?.presetId === preset.id && !isActive;
-                  return (
-                    <button
-                      key={preset.id}
-                      onClick={() => { loadPreset(preset.id); setStrategyOpen(false); }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-all border-b border-border-primary/30 last:border-b-0 ${
-                        isActive
-                          ? isAggressive
-                            ? 'bg-accent-warning/[0.08] text-accent-warning'
-                            : 'bg-accent-neon/[0.08] text-accent-neon'
-                          : isSuggested
-                            ? 'bg-blue-500/[0.04] text-text-secondary hover:bg-blue-500/[0.08]'
-                            : 'text-text-secondary hover:bg-bg-tertiary/60'
-                      }`}
-                    >
-                      {/* Active indicator */}
-                      <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        isActive
-                          ? isAggressive
-                            ? 'bg-accent-warning/20 border border-accent-warning/40'
-                            : 'bg-accent-neon/20 border border-accent-neon/40'
-                          : 'border border-border-primary/50'
-                      }`}>
-                        {isActive && <Check className="w-2.5 h-2.5" />}
-                      </div>
-                      {/* Name + description */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-bold truncate ${isActive ? '' : 'text-text-primary'}`}>{preset.name}</span>
-                          {isSuggested && (
-                            <span className="text-[7px] font-bold uppercase tracking-wider bg-blue-500/90 text-white px-1 py-0.5 rounded-full leading-none flex-shrink-0">
-                              Suggested
-                            </span>
-                          )}
-                          {preset.disabled ? (
-                            <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-error/20 text-accent-error px-1 py-0.5 rounded-full leading-none flex-shrink-0">
-                              Disabled
-                            </span>
-                          ) : preset.underperformer ? (
-                            <span className="text-[7px] font-bold uppercase tracking-wider bg-accent-error/20 text-accent-error px-1 py-0.5 rounded-full leading-none flex-shrink-0">
-                              Losing
-                            </span>
-                          ) : null}
-                        </div>
-                        <span className="text-[8px] opacity-50 line-clamp-1">{preset.description}</span>
-                      </div>
-                      {/* Win rate badge */}
-                      {(() => {
-                        const meta: any = (backtestMeta as any)?.[preset.id];
-                        const wr = meta?.backtested ? String(meta.winRate || '').trim() : '';
-                        const trades = meta?.backtested ? Number(meta.trades || 0) : 0;
-                        const disabled = !!preset.disabled;
-                        const under = !!meta?.underperformer || !!preset.underperformer;
-                        const gateBadge = gateStatusBadge(meta, config, preset.autoWrPrimaryOverridePct);
-                        const stageTag =
-                          meta?.stage === 'promotion' ? 'S3' :
-                          meta?.stage === 'stability' ? 'S2' :
-                          meta?.stage === 'sanity' ? 'S1' :
-                          '';
-                        const promo = !!meta?.promotionEligible;
+            {strategySections.map((category) => {
+              const isCollapsed = !!category.collapsed && collapsedSections[category.key] !== false;
+              const hasPresets = category.presetIds.length > 0;
 
-                        const style = (disabled || under)
-                          ? 'bg-accent-error/10 text-accent-error'
-                          : isActive
+              return (
+                <div key={category.label}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!category.collapsed) return;
+                      setCollapsedSections((current) => ({
+                        ...current,
+                        [category.key]: !current[category.key],
+                      }));
+                    }}
+                    className="flex w-full items-center gap-1.5 px-3 py-1.5 bg-bg-tertiary/50 border-b border-border-primary/50"
+                  >
+                    <span className="text-text-muted/60">{CATEGORY_ICONS[category.icon]}</span>
+                    <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-text-muted/60">
+                      {category.label}
+                    </span>
+                    <span className="ml-auto text-[8px] text-text-muted/60">
+                      {hasPresets ? `${category.presetIds.length}` : ''}
+                    </span>
+                    {category.collapsed && (
+                      isCollapsed
+                        ? <ChevronDown className="w-3 h-3 text-text-muted/60" />
+                        : <ChevronUp className="w-3 h-3 text-text-muted/60" />
+                    )}
+                  </button>
+                  {!isCollapsed && category.presetIds.map((presetId) => {
+                    const preset = STRATEGY_PRESETS.find((entry) => entry.id === presetId);
+                    if (!preset) return null;
+                    const isActive = activePreset === preset.id;
+                    const isAggressive = preset.config.strategyMode === 'aggressive';
+                    const isSuggested = suggestion?.presetId === preset.id && !isActive && suggestionVisible;
+                    const lifecycle = lifecycleById[preset.id];
+                    return (
+                      <button
+                        key={preset.id}
+                        onClick={() => { loadPreset(preset.id); setStrategyOpen(false); }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-all border-b border-border-primary/30 last:border-b-0 ${
+                          isActive
                             ? isAggressive
-                              ? 'bg-accent-warning/10 text-accent-warning'
-                              : 'bg-accent-neon/10 text-accent-neon'
-                            : 'bg-bg-tertiary text-text-muted';
-
-                        return (
-                          <div className="flex flex-col items-end gap-1 max-w-[180px] flex-shrink-0">
-                            <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded leading-tight break-words whitespace-normal text-right ${style}`}>
-                              {wr ? `${wr}${trades > 0 ? ` (${trades}T${stageTag ? ` ${stageTag}` : ''}${promo ? ' PROMO' : ''})` : ''}` : 'Unverified'}
-                            </span>
-                            {wrGateScopeActive && gateBadge && (
-                              <span className={`text-[7px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${
-                                gateBadge === 'Insufficient Sample'
-                                  ? 'text-accent-warning bg-accent-warning/10 border-accent-warning/20'
-                                  : gateBadge === 'Gate Pass @70'
-                                    ? 'text-accent-neon bg-accent-neon/10 border-accent-neon/20'
-                                    : 'text-blue-300 bg-blue-500/10 border-blue-400/20'
-                              }`}>
-                                {gateBadge}
+                              ? 'bg-accent-warning/[0.08] text-accent-warning'
+                              : 'bg-accent-neon/[0.08] text-accent-neon'
+                            : isSuggested
+                              ? 'bg-blue-500/[0.04] text-text-secondary hover:bg-blue-500/[0.08]'
+                              : 'text-text-secondary hover:bg-bg-tertiary/60'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          isActive
+                            ? isAggressive
+                              ? 'bg-accent-warning/20 border border-accent-warning/40'
+                              : 'bg-accent-neon/20 border border-accent-neon/40'
+                            : 'border border-border-primary/50'
+                        }`}>
+                          {isActive && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[10px] font-bold truncate ${isActive ? '' : 'text-text-primary'}`}>{preset.name}</span>
+                            {isSuggested && (
+                              <span className="text-[7px] font-bold uppercase tracking-wider bg-blue-500/90 text-white px-1 py-0.5 rounded-full leading-none flex-shrink-0">
+                                Suggested
                               </span>
                             )}
                           </div>
-                        );
-                      })()}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+                          <span className="text-[8px] opacity-50 line-clamp-1">{preset.description}</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 max-w-[180px] flex-shrink-0">
+                          <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded border leading-tight break-words whitespace-normal text-right ${
+                            LIFECYCLE_TONE_CLASSES[lifecycle?.lifecycle || 'research']
+                          }`}>
+                            {lifecycleChipText(lifecycle, (backtestMeta as Record<string, any>)?.[preset.id])}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {!isCollapsed && !hasPresets && category.emptyMessage && (
+                    <div className="px-3 py-2 text-[10px] text-text-muted/70">
+                      {category.emptyMessage}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1543,16 +1563,16 @@ export function SniperControls() {
         </div>
       )}
       {wrGateScopeActive && wrGateUiSelection && !wrGateUiSelection.selected && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-accent-warning/10 border border-accent-warning/20">
-          <AlertTriangle className="w-3 h-3 text-accent-warning flex-shrink-0" />
-          <span className="text-[10px] text-accent-warning/90">
-            WR gate found no eligible strategy (70→50, min {config.autoWrMinTrades} trades).
+        <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-bg-secondary border border-border-primary">
+          <Info className="w-3 h-3 text-text-muted flex-shrink-0" />
+          <span className="text-[10px] text-text-muted/90">
+            No live-eligible strategy for this regime yet.
           </span>
         </div>
       )}
 
       {/* ─── STRATEGY SUGGESTION REASON ─── */}
-      {suggestion && suggestion.presetId !== activePreset && (
+      {suggestion && suggestionVisible && suggestion.presetId !== activePreset && (
         <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-lg bg-blue-500/[0.06] border border-blue-400/20">
           <Zap className="w-3 h-3 text-blue-400 flex-shrink-0" />
           <span className="text-[10px] text-blue-300/90">
@@ -1567,35 +1587,20 @@ export function SniperControls() {
         const info = STRATEGY_INFO[activePreset];
         const preset = STRATEGY_PRESETS.find(p => p.id === activePreset);
         const meta: any = (backtestMeta as any)?.[activePreset];
-        const isUnder = !!meta?.underperformer || !!preset?.underperformer;
-        const isDisabled = !!preset?.disabled;
+        const lifecycle = activeLifecycle;
         const isAgg = preset?.config.strategyMode === 'aggressive';
         return (
           <div className={`mb-4 rounded-lg border overflow-hidden ${isAgg ? 'border-accent-warning/20 bg-accent-warning/[0.03]' : 'border-accent-neon/20 bg-accent-neon/[0.03]'}`}>
             <div className={`flex items-center gap-2 px-3 py-2 border-b ${isAgg ? 'border-accent-warning/10' : 'border-accent-neon/10'}`}>
               <Info className={`w-3.5 h-3.5 ${isAgg ? 'text-accent-warning' : 'text-accent-neon'}`} />
               <span className={`text-[11px] font-bold ${isAgg ? 'text-accent-warning' : 'text-accent-neon'}`}>{preset?.name}</span>
-              {isDisabled ? (
-                <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-error/10 text-accent-error border-accent-error/25">
-                  disabled
-                </span>
-              ) : isUnder ? (
-                <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-accent-error/10 text-accent-error border-accent-error/25">
-                  losing
-                </span>
-              ) : null}
+              <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                LIFECYCLE_TONE_CLASSES[lifecycle?.lifecycle || 'research']
+              }`}>
+                {STRATEGY_LIFECYCLE_LABELS[lifecycle?.lifecycle || 'research']}
+              </span>
               <span className={`ml-auto text-[9px] font-mono max-w-[220px] leading-tight break-words whitespace-normal text-right ${isAgg ? 'text-accent-warning/70' : 'text-accent-neon/70'}`}>
-                {(() => {
-                  const wr = meta?.backtested ? String(meta.winRate || '').trim() : '';
-                  const trades = meta?.backtested ? Number(meta.trades || 0) : 0;
-                  const stageTag =
-                    meta?.stage === 'promotion' ? 'S3' :
-                    meta?.stage === 'stability' ? 'S2' :
-                    meta?.stage === 'sanity' ? 'S1' :
-                    '';
-                  const promo = !!meta?.promotionEligible;
-                  return wr ? `${wr}${trades > 0 ? ` (${trades}T${stageTag ? ` ${stageTag}` : ''}${promo ? ' PROMO' : ''})` : ''}` : 'Unverified';
-                })()}
+                {lifecycleChipText(lifecycle, meta)}
               </span>
               <button
                 type="button"
@@ -1616,6 +1621,11 @@ export function SniperControls() {
             </div>
             {strategyDetailsOpen && (
             <div className="px-3 py-2.5 space-y-2.5">
+              {lifecycle?.reason && (
+                <div className="rounded-lg border border-border-primary bg-bg-secondary px-2.5 py-2 text-[10px] text-text-secondary leading-relaxed">
+                  {lifecycle.reason}
+                </div>
+              )}
               {/* Risk Level + Hold Time badges */}
               <div className="flex flex-wrap items-center gap-1.5">
                 {info.riskLevel && (

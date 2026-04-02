@@ -2376,9 +2376,12 @@ export async function POST(request: Request) {
       };
     });
 
-    // Detect underperformers: win rate < 40% OR profit factor < 1.0
+    // Compatibility flag only: paper trust is now resolved elsewhere from PF/net PnL/live evidence.
     const underperformers = allRunResults
-      .filter(r => r.result.winRate < 0.40 || r.result.profitFactor < 1.0)
+      .filter((r) => {
+        const netPnlPct = Number((r.result.avgReturnPct || 0) * (r.result.totalTrades || 0));
+        return r.result.profitFactor < 1.0 || netPnlPct <= 0;
+      })
       .map(r => r.result.strategyId);
     // Deduplicate
     const uniqueUnderperformers = [...new Set(underperformers)];

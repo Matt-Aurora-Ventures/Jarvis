@@ -15,6 +15,21 @@ export type TradeSignerMode = 'phantom' | 'session';
 export type AutomationState = 'idle' | 'scanning' | 'executing_buy' | 'cooldown' | 'closing_all' | 'paused' | 'tripped';
 
 export type AssetType = 'memecoin' | 'xstock' | 'prestock' | 'index' | 'bluechip' | 'bags' | 'established';
+export type StrategyRegime =
+  | 'launch_memecoin'
+  | 'bags_launch'
+  | 'established_sol'
+  | 'bluechip_sol'
+  | 'xstock'
+  | 'index';
+export type StrategyLifecycle =
+  | 'research'
+  | 'paper'
+  | 'micro_live'
+  | 'production'
+  | 'quarantined'
+  | 'disabled';
+export type StrategyPrimarySignalType = 'event' | 'confirmation';
 export type PendingTxStatus = 'submitted' | 'settling' | 'confirmed' | 'failed' | 'unresolved';
 export type PendingTxKind = 'buy' | 'sell' | 'fund' | 'sweep';
 
@@ -117,6 +132,12 @@ export interface StrategyPreset {
   trades: number;
   config: Partial<SniperConfig>;
   assetType?: AssetType;
+  regime: StrategyRegime;
+  lifecycleSeed: StrategyLifecycle;
+  primarySignalType: StrategyPrimarySignalType;
+  productionVisible: boolean;
+  researchVisible: boolean;
+  statusReason: string;
   /** Optional primary WR threshold override for auto gate qualification. */
   autoWrPrimaryOverridePct?: number;
   strategyRevision?: string;
@@ -156,6 +177,68 @@ export interface BacktestMetaEntry {
   /** True once the strategy meets the 5,000+ trades promotion gate (sample-size only). */
   promotionEligible?: boolean;
 }
+
+const STRATEGY_REGIME_BY_ASSET_TYPE: Record<AssetType, StrategyRegime> = {
+  memecoin: 'launch_memecoin',
+  bags: 'bags_launch',
+  established: 'established_sol',
+  bluechip: 'bluechip_sol',
+  xstock: 'xstock',
+  prestock: 'xstock',
+  index: 'index',
+};
+
+const PRIMARY_SIGNAL_TYPE_BY_REGIME: Record<StrategyRegime, StrategyPrimarySignalType> = {
+  launch_memecoin: 'event',
+  bags_launch: 'event',
+  established_sol: 'confirmation',
+  bluechip_sol: 'confirmation',
+  xstock: 'confirmation',
+  index: 'confirmation',
+};
+
+const LIFECYCLE_SEED_BY_STRATEGY_ID: Record<string, StrategyLifecycle> = {
+  momentum: 'quarantined',
+  hybrid_b: 'quarantined',
+  let_it_ride: 'quarantined',
+  volume_spike: 'quarantined',
+  established_breakout: 'quarantined',
+  bags_momentum: 'quarantined',
+  xstock_intraday: 'disabled',
+  xstock_swing: 'disabled',
+  prestock_speculative: 'disabled',
+  index_intraday: 'disabled',
+  index_leveraged: 'disabled',
+};
+
+const STRATEGY_STATUS_REASON_BY_ID: Record<string, string> = {
+  pump_fresh_tight: 'Seeded launch strategy with historical R4 edge; paper until confirmed live trades accumulate.',
+  elite: 'Strict event-first launch filter seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  micro_cap_surge: 'Event-driven micro-cap preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  utility_swing: 'Confirmation-driven established-token preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  meme_classic: 'Established meme preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  sol_veteran: 'Liquidity-first established-token preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  bags_fresh_snipe: 'Fresh Bags launch preset seeded from R4 evidence; requires more confirmed history before live automation.',
+  bags_value: 'Quality-first Bags preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  bags_dip_buyer: 'Dip-response Bags preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  bags_bluechip: 'High-score Bags preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  bags_conservative: 'Conservative Bags preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  bags_aggressive: 'High-conviction Bags preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  bags_elite: 'Selective Bags preset seeded from R4 evidence; needs broader sample depth before live automation.',
+  bluechip_trend_follow: 'Blue-chip continuation preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  bluechip_breakout: 'Blue-chip breakout preset seeded from R4 evidence; paper until confirmed live trades accumulate.',
+  momentum: 'Quarantined from live routing until the event model is retuned and reconfirmed.',
+  hybrid_b: 'Quarantined from live routing until the event model is retuned and reconfirmed.',
+  let_it_ride: 'Quarantined from live routing until the event model is retuned and reconfirmed.',
+  volume_spike: 'Quarantined from live routing until confirmation logic is retuned and reconfirmed.',
+  established_breakout: 'Quarantined from live routing until confirmation logic is retuned and reconfirmed.',
+  bags_momentum: 'Quarantined from live routing until Bags momentum logic is retuned and reconfirmed.',
+  xstock_intraday: 'Disabled from the production surface until tokenized-equity data and execution assumptions are rebuilt.',
+  xstock_swing: 'Disabled from the production surface until tokenized-equity data and execution assumptions are rebuilt.',
+  prestock_speculative: 'Disabled from the production surface until tokenized-equity data and execution assumptions are rebuilt.',
+  index_intraday: 'Disabled from the production surface until index-token data and execution assumptions are rebuilt.',
+  index_leveraged: 'Disabled from the production surface until index-token data and execution assumptions are rebuilt.',
+};
 
 /**
  * Strategy presets — R4 REALISTIC-TP optimized (v6, 2026-02-15).
@@ -216,7 +299,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'momentum',
     name: 'MOMENTUM RIDER',
-    description: 'Mean-reversion dip buy — R4: PF 0.97, -0.27%/trade, 1999 trades (borderline)',
+    description: 'Mean-reversion dip buy — quarantined pending event-model retune',
     winRate: '33.1%',
     trades: 1999,
     assetType: 'memecoin',
@@ -230,7 +313,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'hybrid_b',
     name: 'HYBRID B',
-    description: 'Hybrid dip entry — R4: PF 0.97, -0.27%/trade, 1999 trades (borderline)',
+    description: 'Hybrid dip entry — quarantined pending event-model retune',
     winRate: '33.1%',
     trades: 1999,
     assetType: 'memecoin',
@@ -244,7 +327,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'let_it_ride',
     name: 'LET IT RIDE',
-    description: 'Wide hold dip buy — R4: PF 0.97, -0.22%/trade, 1981 trades (borderline)',
+    description: 'Wide hold dip buy — quarantined pending event-model retune',
     winRate: '32.6%',
     trades: 1981,
     assetType: 'memecoin',
@@ -285,7 +368,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'volume_spike',
     name: 'VOLUME SPIKE',
-    description: 'Established volume surges — R4: PF 0.91, -0.45%/trade, 1358 trades (borderline)',
+    description: 'Established volume surges — quarantined pending confirmation-model rebuild',
     winRate: '37.2%',
     trades: 1358,
     assetType: 'established',
@@ -313,7 +396,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'established_breakout',
     name: 'ESTABLISHED BREAKOUT',
-    description: '30d+ breakout signals — R4: PF 0.96, -0.23%/trade, 1047 trades (borderline)',
+    description: '30d+ breakout signals — quarantined pending confirmation-model rebuild',
     winRate: '40.2%',
     trades: 1047,
     assetType: 'established',
@@ -342,7 +425,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'bags_momentum',
     name: 'BAGS MOMENTUM',
-    description: 'Post-launch momentum — R4: PF 0.88, -0.60%/trade, 61 trades (borderline)',
+    description: 'Post-launch momentum — quarantined pending Bags momentum retune',
     winRate: '29.5%',
     trades: 61,
     assetType: 'bags',
@@ -471,7 +554,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'xstock_intraday',
     name: 'xSTOCK INTRADAY',
-    description: 'Stock intraday — R4: PF 0.75, -0.92%/trade, 3231 trades (LOSING)',
+    description: 'Stock intraday — disabled until tokenized-equity data is rebuilt',
     winRate: '32.2%',
     trades: 3231,
     assetType: 'xstock',
@@ -485,7 +568,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'xstock_swing',
     name: 'xSTOCK SWING',
-    description: 'Stock swing — R4: PF 0.74, -0.94%/trade, 3047 trades (LOSING)',
+    description: 'Stock swing — disabled until tokenized-equity data is rebuilt',
     winRate: '32.0%',
     trades: 3047,
     assetType: 'xstock',
@@ -499,7 +582,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'prestock_speculative',
     name: 'PRESTOCK SPECULATIVE',
-    description: 'Pre-stock spec — R4: PF 0.74, -0.94%/trade, 3301 trades (LOSING)',
+    description: 'Pre-stock spec — disabled until tokenized-equity data is rebuilt',
     winRate: '32.0%',
     trades: 3301,
     assetType: 'prestock',
@@ -514,7 +597,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'index_intraday',
     name: 'INDEX INTRADAY',
-    description: 'Index intraday — R4: PF 0.74, -0.94%/trade, 3047 trades (LOSING)',
+    description: 'Index intraday — disabled until index-token data is rebuilt',
     winRate: '32.0%',
     trades: 3047,
     assetType: 'index',
@@ -528,7 +611,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'index_leveraged',
     name: 'INDEX LEVERAGED',
-    description: 'Index leveraged — R4: PF 0.75, -0.92%/trade, 3231 trades (LOSING)',
+    description: 'Index leveraged — disabled until index-token data is rebuilt',
     winRate: '32.2%',
     trades: 3231,
     assetType: 'index',
@@ -539,7 +622,23 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       strategyMode: 'balanced',
     },
   },
-].map((preset) => ({ ...preset, ...STRATEGY_SEED_META } as StrategyPreset));
+].map((preset) => {
+  const assetType = (preset.assetType || 'memecoin') as AssetType;
+  const regime = STRATEGY_REGIME_BY_ASSET_TYPE[assetType];
+  const lifecycleSeed = LIFECYCLE_SEED_BY_STRATEGY_ID[preset.id] || 'paper';
+  return {
+    ...preset,
+    regime,
+    lifecycleSeed,
+    primarySignalType: PRIMARY_SIGNAL_TYPE_BY_REGIME[regime],
+    productionVisible: lifecycleSeed !== 'disabled' && lifecycleSeed !== 'quarantined',
+    researchVisible: true,
+    statusReason:
+      STRATEGY_STATUS_REASON_BY_ID[preset.id]
+      || 'Seeded R4 preset pending fresh validation in the current market regime.',
+    ...STRATEGY_SEED_META,
+  } as StrategyPreset;
+});
 
 /** Deprecated: hour-based gating is disabled globally (crypto trades 24/7). */
 export const PROVEN_TRADING_HOURS: number[] = [];
@@ -1052,6 +1151,8 @@ interface SniperState {
     txHash?: string;
     entrySource?: Position['entrySource'];
     decayGamma?: number;
+    learningClass?: 'strategy' | 'execution' | 'infra';
+    confirmationState?: 'confirmed' | 'failed' | 'unresolved';
   }) => void;
   resetStrategyBeliefs: () => void;
   /** Server-provided runtime strategy overrides for auto mode (signed snapshot). */
@@ -1469,6 +1570,8 @@ export const useSniperStore = create<SniperState>()(
         decayGamma: strategyOutcome.decayGamma,
         txHash,
         entrySource: pos.entrySource,
+        learningClass: 'strategy',
+        confirmationState: 'confirmed',
       });
     }
 
@@ -1480,6 +1583,8 @@ export const useSniperStore = create<SniperState>()(
       positionId: pos.id,
       mint: pos.mint,
       status,
+      learningClass: 'strategy',
+      confirmationState: 'confirmed',
       symbol: pos.symbol,
       walletAddress: pos.walletAddress,
       strategyId: pos.strategyId ?? null,
@@ -2063,6 +2168,8 @@ export const useSniperStore = create<SniperState>()(
     if (!strategyId) return s;
     // Fail-closed learning: only auto entries with confirmed signature evidence can update beliefs.
     if (args.entrySource && args.entrySource !== 'auto') return s;
+    if (args.learningClass && args.learningClass !== 'strategy') return s;
+    if (args.confirmationState && args.confirmationState !== 'confirmed') return s;
     if (!txHash) return s;
     return {
       strategyBeliefs: applyDiscountedOutcome(

@@ -86,6 +86,22 @@ export async function appendTradeTelemetryEvent(
     positionId: normalized.positionId,
     mint: normalized.mint,
     status: normalizeIngestStatus(normalized.status),
+    learningClass:
+      normalized.learningClass === 'strategy'
+        ? 'strategy'
+        : normalized.learningClass === 'execution'
+          ? 'execution'
+          : normalized.learningClass === 'infra'
+            ? 'infra'
+            : undefined,
+    confirmationState:
+      normalized.confirmationState === 'confirmed'
+        ? 'confirmed'
+        : normalized.confirmationState === 'failed'
+          ? 'failed'
+          : normalized.confirmationState === 'unresolved'
+            ? 'unresolved'
+            : undefined,
     symbol: normalized.symbol,
     walletAddress: normalized.walletAddress || undefined,
     strategyId: normalized.strategyId || undefined,

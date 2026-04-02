@@ -13,6 +13,7 @@ import { usePnlTracker } from '@/hooks/usePnlTracker';
 import { usePositionReconciliation } from '@/hooks/usePositionReconciliation';
 import { usePumpPortalStream } from '@/hooks/usePumpPortalStream';
 import { useLogsSubscribe } from '@/hooks/useLogsSubscribe';
+import { useDexPaprikaStream } from '@/hooks/useDexPaprikaStream';
 import { DATA_SOURCE } from '@/lib/data-source-config';
 import { filterTradeManagedOpenPositionsForActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import type { BagsGraduation } from '@/lib/bags-api';
@@ -124,6 +125,9 @@ export function SniperAutomationOrchestrator() {
   // Only one activates based on NEXT_PUBLIC_DATA_SOURCE (pumpportal | logs-subscribe | poll-only).
   usePumpPortalStream();
   useLogsSubscribe();
+  // Real-time P&L price streaming via DexPaprika SSE (VoxForge Phase 2).
+  // Feeds prices into both Zustand store and risk worker. REST polling becomes 15s fallback.
+  useDexPaprikaStream();
 
   const autoCycleInFlightRef = useRef(false);
   const nextAutoAllowedAtRef = useRef(0);

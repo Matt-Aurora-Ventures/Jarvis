@@ -1,43 +1,124 @@
-/** Strategy categories for the grouped dropdown selector */
+import { buildStrategyLifecycleMap, type ResolvedStrategyLifecycle } from '@/lib/strategy-lifecycle';
+import { regimeForAssetType } from '@/lib/strategy-regime-router';
+import type {
+  AssetType,
+  BacktestMetaEntry,
+  Position,
+  StrategyLifecycle,
+  StrategyPreset,
+} from '@/stores/useSniperStore';
+import { STRATEGY_PRESETS } from '@/stores/useSniperStore';
+
 export interface StrategyCategory {
+  key: 'live' | 'paper' | 'research' | 'disabled';
   label: string;
   icon: string;
+  defaultVisible: boolean;
+  collapsed?: boolean;
   presetIds: string[];
+  emptyMessage?: string;
 }
 
-export const STRATEGY_CATEGORIES: StrategyCategory[] = [
+function seedMatchesLifecycle(preset: StrategyPreset, lifecycles: StrategyLifecycle[]): boolean {
+  return lifecycles.includes(preset.lifecycleSeed);
+}
+
+const STRATEGY_CATEGORY_TEMPLATES: StrategyCategory[] = [
   {
-    label: 'TOP PERFORMERS',
-    icon: 'Trophy',
-    // Profitable presets only (default recommendations).
-    presetIds: ['pump_fresh_tight', 'utility_swing', 'meme_classic'],
+    key: 'live',
+    label: 'Live Eligible',
+    icon: 'ShieldCheck',
+    defaultVisible: true,
+    presetIds: [],
+    emptyMessage: 'No live-eligible strategy for this regime yet.',
   },
   {
-    label: 'MEMECOIN',
-    icon: 'Zap',
-    presetIds: ['elite', 'micro_cap_surge', 'momentum', 'hybrid_b', 'let_it_ride'],
+    key: 'paper',
+    label: 'Paper Validated',
+    icon: 'FlaskConical',
+    defaultVisible: true,
+    presetIds: [],
   },
   {
-    label: 'ESTABLISHED TOKENS',
-    icon: 'Landmark',
-    presetIds: ['sol_veteran', 'volume_spike', 'established_breakout'],
+    key: 'research',
+    label: 'Research Lab',
+    icon: 'Rocket',
+    defaultVisible: false,
+    collapsed: true,
+    presetIds: [],
   },
   {
-    label: 'BAGS.FM',
-    icon: 'Package',
-    presetIds: [
-      'bags_elite', 'bags_bluechip', 'bags_conservative', 'bags_value',
-      'bags_dip_buyer', 'bags_fresh_snipe', 'bags_momentum', 'bags_aggressive',
-    ],
-  },
-  {
-    label: 'BLUE CHIP SOLANA',
-    icon: 'Shield',
-    presetIds: ['bluechip_trend_follow', 'bluechip_breakout'],
-  },
-  {
-    label: 'xSTOCK & INDEX',
-    icon: 'TrendingUp',
-    presetIds: ['xstock_intraday', 'xstock_swing', 'prestock_speculative', 'index_intraday', 'index_leveraged'],
+    key: 'disabled',
+    label: 'Disabled',
+    icon: 'Ban',
+    defaultVisible: false,
+    collapsed: true,
+    presetIds: [],
   },
 ];
+
+export const STRATEGY_CATEGORIES: StrategyCategory[] = STRATEGY_CATEGORY_TEMPLATES.map((category) => {
+  const acceptedLifecycles =
+    category.key === 'live'
+      ? ([] as StrategyLifecycle[])
+      : category.key === 'paper'
+        ? (['paper'] as StrategyLifecycle[])
+        : category.key === 'research'
+          ? (['research'] as StrategyLifecycle[])
+          : (['quarantined', 'disabled'] as StrategyLifecycle[]);
+
+  return {
+    ...category,
+    presetIds: STRATEGY_PRESETS
+      .filter((preset) => seedMatchesLifecycle(preset, acceptedLifecycles))
+      .map((preset) => preset.id),
+  };
+});
+
+export interface StrategyCategorySection extends StrategyCategory {
+  lifecyclesById: Record<string, ResolvedStrategyLifecycle>;
+}
+
+export function buildStrategyCategorySections(args: {
+  presets: StrategyPreset[];
+  assetType: AssetType;
+  backtestMeta?: Record<string, BacktestMetaEntry>;
+  positions?: Position[];
+  lifecycleById?: Record<string, ResolvedStrategyLifecycle>;
+}): StrategyCategorySection[] {
+  const lifecycleById = args.lifecycleById || buildStrategyLifecycleMap({
+    presets: args.presets,
+    backtestMeta: args.backtestMeta,
+    positions: args.positions,
+  });
+  const activeRegime = regimeForAssetType(args.assetType);
+  const presetsForRegime = args.presets.filter((preset) => preset.regime === activeRegime);
+
+  const byLifecycle = (accepted: StrategyLifecycle[]) =>
+    presetsForRegime
+      .filter((preset) => accepted.includes(lifecycleById[preset.id]?.lifecycle || preset.lifecycleSeed))
+      .map((preset) => preset.id);
+
+  return [
+    {
+      ...STRATEGY_CATEGORIES[0],
+      presetIds: byLifecycle(['micro_live', 'production']),
+      lifecyclesById: lifecycleById,
+    },
+    {
+      ...STRATEGY_CATEGORIES[1],
+      presetIds: byLifecycle(['paper']),
+      lifecyclesById: lifecycleById,
+    },
+    {
+      ...STRATEGY_CATEGORIES[2],
+      presetIds: byLifecycle(['research']),
+      lifecyclesById: lifecycleById,
+    },
+    {
+      ...STRATEGY_CATEGORIES[3],
+      presetIds: byLifecycle(['quarantined', 'disabled']),
+      lifecyclesById: lifecycleById,
+    },
+  ];
+}

@@ -5,6 +5,7 @@ import { useSniperStore, STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import { usePhantomWallet } from '@/hooks/usePhantomWallet';
 import { filterOpenPositionsForActiveWallet, isPositionInActiveWallet, resolveActiveWallet } from '@/lib/position-scope';
 import { isOperatorManagedPositionMeta, isReliableTradeForStats, resolvePositionPnlPercent } from '@/lib/position-reliability';
+import { buildStrategyLifecycleMap, STRATEGY_LIFECYCLE_LABELS } from '@/lib/strategy-lifecycle';
 
 export function PerformanceSummary() {
   const { address } = usePhantomWallet();
@@ -43,6 +44,11 @@ export function PerformanceSummary() {
     meta?.stage === 'stability' ? 'S2' :
     meta?.stage === 'sanity' ? 'S1' :
     '';
+  const lifecycle = buildStrategyLifecycleMap({
+    presets: STRATEGY_PRESETS,
+    backtestMeta: backtestMeta as Record<string, any>,
+    positions,
+  })[activePreset];
 
   const stats = [
     {
@@ -77,16 +83,14 @@ export function PerformanceSummary() {
       icon: <Shield className="w-4 h-4" />,
       label: 'Strategy',
       value: `${presetLabel} ${config.stopLossPct}/${config.takeProfitPct}+${config.trailingStopPct}t`,
-      sub: meta?.backtested
-        ? `BT: ${meta.winRate} (${meta.trades}T${stageTag ? ` ${stageTag}` : ''}, ${meta.dataSource})${meta.promotionEligible ? '  PROMO' : ''}${meta.underperformer ? '  UNDERPERF' : ''}`
-        : 'BT: Unverified (run Strategy Validation)',
-      color: meta?.underperformer
-        ? 'text-accent-error'
+      sub: `${STRATEGY_LIFECYCLE_LABELS[lifecycle?.lifecycle || 'research']}${meta?.backtested ? ` | ${meta.winRate} (${meta.trades}T${stageTag ? ` ${stageTag}` : ''}, ${meta.dataSource})` : ''}`,
+      color: lifecycle?.lifecycle === 'quarantined' || lifecycle?.lifecycle === 'disabled'
+        ? 'text-accent-warning'
         : config.strategyMode === 'aggressive'
           ? 'text-accent-warning'
           : 'text-accent-neon',
-      bgColor: meta?.underperformer
-        ? 'bg-accent-error/5 border-accent-error/15'
+      bgColor: lifecycle?.lifecycle === 'quarantined' || lifecycle?.lifecycle === 'disabled'
+        ? 'bg-accent-warning/5 border-accent-warning/15'
         : config.strategyMode === 'aggressive'
           ? 'bg-accent-warning/5 border-accent-warning/15'
           : 'bg-accent-neon/5 border-accent-neon/15',

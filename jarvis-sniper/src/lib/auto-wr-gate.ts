@@ -4,12 +4,15 @@ import type {
   SniperConfig,
   StrategyPreset,
 } from '@/stores/useSniperStore';
+import type { ResolvedStrategyLifecycle } from '@/lib/strategy-lifecycle';
+import { selectStrategiesForRegime } from '@/lib/strategy-regime-router';
 
 export interface WrGateCandidate {
   strategyId: string;
   assetType?: AssetType;
   meta?: BacktestMetaEntry;
   primaryThresholdOverridePct?: number;
+  resolvedLifecycle?: ResolvedStrategyLifecycle;
 }
 
 export interface WrGateQualification {
@@ -266,15 +269,36 @@ export function buildWrGateCandidates(
   presets: StrategyPreset[],
   backtestMeta: Record<string, BacktestMetaEntry>,
   scope: SniperConfig['autoWrScope'],
+  options: {
+    assetType?: AssetType;
+    lifecycleById?: Record<string, ResolvedStrategyLifecycle>;
+  } = {},
 ): WrGateCandidate[] {
+  const eligibleIds = new Set(
+    options.assetType
+      ? selectStrategiesForRegime({
+          presets,
+          assetType: options.assetType,
+          lifecycleById: options.lifecycleById,
+          requireAutoEligible: true,
+        }).map((preset) => preset.id)
+      : presets
+          .filter((preset) => {
+            const lifecycle = options.lifecycleById?.[preset.id];
+            return lifecycle ? lifecycle.autoEligible : true;
+          })
+          .map((preset) => preset.id),
+  );
+
   return presets
-    .filter((p) => !p.disabled && !p.underperformer)
-    .filter((p) => scopeAllowsAsset(scope, p.assetType))
-    .map((p) => ({
-      strategyId: p.id,
-      assetType: p.assetType || 'memecoin',
-      meta: backtestMeta[p.id],
-      primaryThresholdOverridePct: p.autoWrPrimaryOverridePct,
+    .filter((preset) => eligibleIds.has(preset.id))
+    .filter((preset) => scopeAllowsAsset(scope, preset.assetType))
+    .map((preset) => ({
+      strategyId: preset.id,
+      assetType: preset.assetType || 'memecoin',
+      meta: backtestMeta[preset.id],
+      primaryThresholdOverridePct: preset.autoWrPrimaryOverridePct,
+      resolvedLifecycle: options.lifecycleById?.[preset.id],
     }));
 }
 

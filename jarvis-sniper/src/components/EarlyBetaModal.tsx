@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Shield, Wallet } from 'lucide-react';
+import { STRATEGY_PRESETS, useSniperStore } from '@/stores/useSniperStore';
+import { buildStrategyLifecycleMap, STRATEGY_LIFECYCLE_LABELS } from '@/lib/strategy-lifecycle';
 
 // Session-scoped acknowledgment:
 // show once per new browser session/tab, but not on every page navigation.
@@ -11,6 +13,17 @@ const BANNER_ACK_KEY = 'jarvis-sniper:early-beta-banner-ack:session:v1';
 export function EarlyBetaModal() {
   const [open, setOpen] = useState(false);
   const [bannerVisible, setBannerVisible] = useState(true);
+  const { activePreset, backtestMeta, positions } = useSniperStore();
+  const lifecycle = useMemo(
+    () => buildStrategyLifecycleMap({
+      presets: STRATEGY_PRESETS,
+      backtestMeta,
+      positions,
+    })[activePreset],
+    [activePreset, backtestMeta, positions],
+  );
+  const disclosureVisible = lifecycle?.lifecycle !== 'micro_live' && lifecycle?.lifecycle !== 'production';
+  const lifecycleLabel = STRATEGY_LIFECYCLE_LABELS[lifecycle?.lifecycle || 'research'];
 
   useEffect(() => {
     try {
@@ -44,16 +57,15 @@ export function EarlyBetaModal() {
 
   return (
     <>
-      {/* Always-on warning strip so risk language is permanently visible in-app */}
-      {bannerVisible && (
+      {bannerVisible && disclosureVisible && (
         <>
           {/* Mobile: compact pill so it doesn't cover the bottom terminal tabs. */}
           <div className="lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+112px)] left-1/2 -translate-x-1/2 z-[520] w-[min(96vw,560px)]">
             <div className="rounded-full border border-accent-error/35 bg-bg-primary/90 px-3 py-2 text-[10px] leading-tight text-text-secondary shadow-lg">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-accent-error whitespace-nowrap">PRE-ALPHA</span>
+                <span className="font-semibold text-accent-warning whitespace-nowrap">{lifecycleLabel}</span>
                 <span className="flex-1 truncate">
-                  You can lose SOL. Use a burner wallet.
+                  Manual validation only. Use a burner wallet for non-live presets.
                 </span>
                 <button
                   type="button"
@@ -81,9 +93,8 @@ export function EarlyBetaModal() {
             <div className="rounded-lg border border-accent-error/35 bg-bg-primary/90 backdrop-blur px-3 py-2 text-[11px] leading-relaxed text-text-secondary shadow-lg">
               <div className="flex items-start gap-3">
                 <p className="flex-1">
-                  <span className="font-semibold text-accent-error">PRE-ALPHA WARNING:</span>{' '}
-                  This is an early showcase. Many algorithms are still being tuned and may perform badly. You can lose all SOL used here.
-                  Use a burner wallet and tiny size (example: 0.01 SOL). No guarantees. No liability assumed.
+                  <span className="font-semibold text-accent-warning">{lifecycleLabel} Notice:</span>{' '}
+                  This preset is not live-cleared yet. Keep sizing tiny, expect manual validation, and use a burner wallet when you enter Research or Paper strategies.
                 </p>
                 <div className="shrink-0 flex items-center gap-1">
                   <button
@@ -110,7 +121,7 @@ export function EarlyBetaModal() {
         </>
       )}
 
-      {open && (
+      {open && disclosureVisible && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
@@ -127,16 +138,15 @@ export function EarlyBetaModal() {
               <div className="flex-1">
                 <div className="flex items-center justify-between gap-3">
                   <h2 id="early-beta-title" className="font-display text-base font-semibold">
-                    Read this before trading
+                    Read this before using non-live presets
                   </h2>
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-wider px-2 py-1 rounded-full bg-accent-warning/10 text-accent-warning border border-accent-warning/25">
-                    pre-alpha
+                    {lifecycleLabel}
                   </span>
                 </div>
 
                 <p className="mt-2 text-[12px] text-text-secondary leading-relaxed">
-                  Plain English: this is super early. Most core features work, but a lot of algorithms are not close to final quality yet.
-                  This app is mainly to show how the product works while we continue tuning and backtesting.
+                  Plain English: this strategy has not cleared live routing yet. The product works, but this preset still needs either paper validation, micro-live evidence, or both before it should be trusted for automation.
                 </p>
 
                 <div className="mt-4 rounded-lg border border-accent-error/25 bg-accent-error/5 p-3">

@@ -64,20 +64,18 @@ describe('STRATEGY_CATEGORIES', () => {
     expect(Array.isArray(mod.STRATEGY_CATEGORIES)).toBe(true);
   });
 
-  it('should have 6 categories', async () => {
+  it('should have 4 lifecycle-driven categories', async () => {
     const { STRATEGY_CATEGORIES } = await import('@/components/strategy-categories');
-    expect(STRATEGY_CATEGORIES.length).toBe(6);
+    expect(STRATEGY_CATEGORIES.length).toBe(4);
   });
 
-  it('should have correct category labels', async () => {
+  it('should have lifecycle-aware category labels', async () => {
     const { STRATEGY_CATEGORIES } = await import('@/components/strategy-categories');
     const labels = STRATEGY_CATEGORIES.map((c: any) => c.label);
-    expect(labels).toContain('TOP PERFORMERS');
-    expect(labels).toContain('MEMECOIN');
-    expect(labels).toContain('ESTABLISHED TOKENS');
-    expect(labels).toContain('BAGS.FM');
-    expect(labels).toContain('BLUE CHIP SOLANA');
-    expect(labels).toContain('xSTOCK & INDEX');
+    expect(labels).toContain('Live Eligible');
+    expect(labels).toContain('Paper Validated');
+    expect(labels).toContain('Research Lab');
+    expect(labels).toContain('Disabled');
   });
 
   it('every preset ID in categories should exist in STRATEGY_PRESETS', async () => {
@@ -88,13 +86,48 @@ describe('STRATEGY_CATEGORIES', () => {
     }
   });
 
-  it('every STRATEGY_PRESET should appear in exactly one category', async () => {
-    const { STRATEGY_CATEGORIES } = await import('@/components/strategy-categories');
-    const allCategoryIds = STRATEGY_CATEGORIES.flatMap((c: any) => c.presetIds);
-    for (const preset of STRATEGY_PRESETS) {
-      expect(allCategoryIds).toContain(preset.id);
-    }
-    expect(new Set(allCategoryIds).size).toBe(allCategoryIds.length);
+  it('hides quarantined and disabled strategies from the default production picker', async () => {
+    const { buildStrategyCategorySections } = await import('@/components/strategy-categories');
+    const sections = buildStrategyCategorySections({
+      presets: STRATEGY_PRESETS,
+      assetType: 'memecoin',
+      backtestMeta: {
+        pump_fresh_tight: {
+          winRate: '73%',
+          trades: 1800,
+          totalTrades: 1800,
+          backtested: true,
+          dataSource: 'mixed',
+          underperformer: false,
+          winRatePct: 73,
+          winRateLower95Pct: 71.2,
+          winRateUpper95Pct: 75.4,
+          netPnlPct: 14.2,
+          profitFactorValue: 1.31,
+        },
+        momentum: {
+          winRate: '61%',
+          trades: 1800,
+          totalTrades: 1800,
+          backtested: true,
+          dataSource: 'mixed',
+          underperformer: false,
+          winRatePct: 61,
+          winRateLower95Pct: 59.2,
+          winRateUpper95Pct: 63.4,
+          netPnlPct: 8.2,
+          profitFactorValue: 1.12,
+        },
+      },
+    });
+
+    const visibleIds = sections
+      .filter((section: any) => section.defaultVisible)
+      .flatMap((section: any) => section.presetIds);
+
+    expect(visibleIds).toContain('pump_fresh_tight');
+    expect(visibleIds).not.toContain('momentum');
+    expect(visibleIds).not.toContain('xstock_intraday');
   });
 
   it('each category should have label, icon, and presetIds', async () => {
@@ -103,7 +136,6 @@ describe('STRATEGY_CATEGORIES', () => {
       expect(cat.label).toBeTruthy();
       expect(cat.icon).toBeTruthy();
       expect(Array.isArray(cat.presetIds)).toBe(true);
-      expect(cat.presetIds.length).toBeGreaterThan(0);
     }
   });
 });

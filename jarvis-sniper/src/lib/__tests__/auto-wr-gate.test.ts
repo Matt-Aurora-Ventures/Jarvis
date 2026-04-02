@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildWrGateCandidates,
   qualifiesByWrGate,
   resolveAdaptiveThreshold,
   selectBestWrGateStrategy,
   type WrGateCandidate,
 } from '@/lib/auto-wr-gate';
+import type { ResolvedStrategyLifecycle } from '@/lib/strategy-lifecycle';
+import { STRATEGY_PRESETS } from '@/stores/useSniperStore';
 import type { BacktestMetaEntry, SniperConfig } from '@/stores/useSniperStore';
 
 const BASE_CONFIG: Pick<
@@ -106,5 +109,66 @@ describe('auto-wr-gate', () => {
     expect(selection.selected?.strategyId).toBe('pump_fresh_tight');
     expect(selection.selectedThresholdSource).toBe('primary_override');
     expect(selection.selectedThresholdPct).toBe(50);
+  });
+
+  it('rejects non-lifecycle-eligible strategies even when raw WR passes', () => {
+    const lifecycleById: Record<string, ResolvedStrategyLifecycle> = {
+      pump_fresh_tight: {
+        lifecycle: 'paper',
+        regime: 'launch_memecoin',
+        reason: 'paper only',
+        sampleStage: 'stability',
+        paperEligible: true,
+        autoEligible: false,
+        confirmedLiveTrades: 0,
+        liveProfitFactor: 0,
+        liveMaxDrawdownPct: 0,
+        fillRatePct: 0,
+      },
+      micro_cap_surge: {
+        lifecycle: 'micro_live',
+        regime: 'launch_memecoin',
+        reason: 'confirmed live trades',
+        sampleStage: 'stability',
+        paperEligible: true,
+        autoEligible: true,
+        confirmedLiveTrades: 12,
+        liveProfitFactor: 1.04,
+        liveMaxDrawdownPct: 7,
+        fillRatePct: 88,
+      },
+      momentum: {
+        lifecycle: 'quarantined',
+        regime: 'launch_memecoin',
+        reason: 'quarantined',
+        sampleStage: 'stability',
+        paperEligible: false,
+        autoEligible: false,
+        confirmedLiveTrades: 4,
+        liveProfitFactor: 0.82,
+        liveMaxDrawdownPct: 18,
+        fillRatePct: 81,
+      },
+    };
+
+    const meta = {
+      pump_fresh_tight: makeMeta({ winRateLower95Pct: 74, netPnlPct: 10 }),
+      micro_cap_surge: makeMeta({ winRateLower95Pct: 71, netPnlPct: 8 }),
+      momentum: makeMeta({ winRateLower95Pct: 73, netPnlPct: 12 }),
+    } as const;
+
+    const candidates = buildWrGateCandidates(
+      STRATEGY_PRESETS,
+      meta as any,
+      'memecoin_bags',
+      {
+        assetType: 'memecoin',
+        lifecycleById,
+      },
+    );
+    const selection = selectBestWrGateStrategy(candidates, BASE_CONFIG);
+
+    expect(candidates.map((candidate) => candidate.strategyId)).toEqual(['micro_cap_surge']);
+    expect(selection.selected?.strategyId).toBe('micro_cap_surge');
   });
 });

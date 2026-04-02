@@ -1,15 +1,12 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { Storage } from '@google-cloud/storage';
 import { evidenceTradesToCsv, type BacktestEvidenceBundle } from './backtest-evidence';
 import { backtestStatusBucketName } from './backtest-run-status-store';
 
-let _gcsStorage: import('@google-cloud/storage').Storage | null = null;
-function gcs(): import('@google-cloud/storage').Storage {
-  if (!_gcsStorage) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { Storage } = require('@google-cloud/storage') as typeof import('@google-cloud/storage');
-    _gcsStorage = new Storage();
-  }
+let _gcsStorage: Storage | null = null;
+function gcs(): Storage {
+  if (!_gcsStorage) _gcsStorage = new Storage();
   return _gcsStorage;
 }
 

@@ -3,6 +3,7 @@ import {
   buildWrGateCandidates,
   selectBestWrGateStrategy,
 } from '@/lib/auto-wr-gate';
+import type { ResolvedStrategyLifecycle } from '@/lib/strategy-lifecycle';
 import { STRATEGY_PRESETS, type SniperConfig } from '@/stores/useSniperStore';
 
 const GATE_CONFIG: Pick<
@@ -21,7 +22,7 @@ const GATE_CONFIG: Pick<
 };
 
 describe('sniper auto WR gate strategy selection', () => {
-  it('chooses highest net PnL among gate-eligible strategies', () => {
+  it('chooses highest net PnL among gate-eligible strategies inside the active regime', () => {
     const meta = {
       pump_fresh_tight: {
         winRate: '78%',
@@ -49,9 +50,63 @@ describe('sniper auto WR gate strategy selection', () => {
         netPnlPct: 21.9,
         profitFactorValue: 1.6,
       },
+      bags_value: {
+        winRate: '76%',
+        trades: 1900,
+        totalTrades: 1900,
+        backtested: true,
+        dataSource: 'mixed',
+        underperformer: false,
+        winRatePct: 76,
+        winRateLower95Pct: 73.6,
+        winRateUpper95Pct: 78.2,
+        netPnlPct: 31.9,
+        profitFactorValue: 1.9,
+      },
     } as const;
+    const lifecycleById: Record<string, ResolvedStrategyLifecycle> = {
+      pump_fresh_tight: {
+        lifecycle: 'micro_live',
+        regime: 'launch_memecoin',
+        reason: 'micro live',
+        sampleStage: 'stability',
+        paperEligible: true,
+        autoEligible: true,
+        confirmedLiveTrades: 11,
+        liveProfitFactor: 1.03,
+        liveMaxDrawdownPct: 6,
+        fillRatePct: 90,
+      },
+      micro_cap_surge: {
+        lifecycle: 'production',
+        regime: 'launch_memecoin',
+        reason: 'production',
+        sampleStage: 'promotion',
+        paperEligible: true,
+        autoEligible: true,
+        confirmedLiveTrades: 33,
+        liveProfitFactor: 1.07,
+        liveMaxDrawdownPct: 9,
+        fillRatePct: 91,
+      },
+      bags_value: {
+        lifecycle: 'production',
+        regime: 'bags_launch',
+        reason: 'bags production',
+        sampleStage: 'promotion',
+        paperEligible: true,
+        autoEligible: true,
+        confirmedLiveTrades: 36,
+        liveProfitFactor: 1.11,
+        liveMaxDrawdownPct: 7,
+        fillRatePct: 93,
+      },
+    };
 
-    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, meta as any, GATE_CONFIG.autoWrScope);
+    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, meta as any, GATE_CONFIG.autoWrScope, {
+      assetType: 'memecoin',
+      lifecycleById,
+    });
     const selection = selectBestWrGateStrategy(candidates, GATE_CONFIG);
 
     expect(selection.resolution.mode).toBe('primary');
@@ -77,7 +132,25 @@ describe('sniper auto WR gate strategy selection', () => {
       },
     } as const;
 
-    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, meta as any, GATE_CONFIG.autoWrScope);
+    const lifecycleById: Record<string, ResolvedStrategyLifecycle> = {
+      micro_cap_surge: {
+        lifecycle: 'micro_live',
+        regime: 'launch_memecoin',
+        reason: 'micro live',
+        sampleStage: 'stability',
+        paperEligible: true,
+        autoEligible: true,
+        confirmedLiveTrades: 9,
+        liveProfitFactor: 0.99,
+        liveMaxDrawdownPct: 8,
+        fillRatePct: 87,
+      },
+    };
+
+    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, meta as any, GATE_CONFIG.autoWrScope, {
+      assetType: 'memecoin',
+      lifecycleById,
+    });
     const selection = selectBestWrGateStrategy(candidates, GATE_CONFIG);
 
     expect(selection.resolution.mode).toBe('fallback');
@@ -103,7 +176,25 @@ describe('sniper auto WR gate strategy selection', () => {
       },
     } as const;
 
-    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, meta as any, GATE_CONFIG.autoWrScope);
+    const lifecycleById: Record<string, ResolvedStrategyLifecycle> = {
+      pump_fresh_tight: {
+        lifecycle: 'micro_live',
+        regime: 'launch_memecoin',
+        reason: 'micro live',
+        sampleStage: 'stability',
+        paperEligible: true,
+        autoEligible: true,
+        confirmedLiveTrades: 8,
+        liveProfitFactor: 0.97,
+        liveMaxDrawdownPct: 6,
+        fillRatePct: 89,
+      },
+    };
+
+    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, meta as any, GATE_CONFIG.autoWrScope, {
+      assetType: 'memecoin',
+      lifecycleById,
+    });
     const selection = selectBestWrGateStrategy(candidates, GATE_CONFIG);
 
     expect(selection.resolution.mode).toBe('primary');
@@ -129,7 +220,25 @@ describe('sniper auto WR gate strategy selection', () => {
       },
     } as const;
 
-    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, meta as any, GATE_CONFIG.autoWrScope);
+    const lifecycleById: Record<string, ResolvedStrategyLifecycle> = {
+      pump_fresh_tight: {
+        lifecycle: 'paper',
+        regime: 'launch_memecoin',
+        reason: 'paper only',
+        sampleStage: 'stability',
+        paperEligible: true,
+        autoEligible: false,
+        confirmedLiveTrades: 0,
+        liveProfitFactor: 0,
+        liveMaxDrawdownPct: 0,
+        fillRatePct: 0,
+      },
+    };
+
+    const candidates = buildWrGateCandidates(STRATEGY_PRESETS, meta as any, GATE_CONFIG.autoWrScope, {
+      assetType: 'memecoin',
+      lifecycleById,
+    });
     const selection = selectBestWrGateStrategy(candidates, GATE_CONFIG);
 
     expect(selection.resolution.mode).toBe('none');

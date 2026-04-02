@@ -163,6 +163,8 @@ export interface TradeTelemetryIngest {
   positionId: string;
   mint: string;
   status: 'tp_hit' | 'sl_hit' | 'trail_stop' | 'expired' | 'closed';
+  learningClass?: 'strategy' | 'execution' | 'infra';
+  confirmationState?: 'confirmed' | 'failed' | 'unresolved';
   symbol?: string;
   walletAddress?: string;
   strategyId?: string | null;
