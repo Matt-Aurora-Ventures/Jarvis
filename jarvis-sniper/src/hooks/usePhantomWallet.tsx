@@ -240,9 +240,20 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
     const provider = getProvider();
     if (!provider) throw new Error('Wallet provider not found');
     if (!provider.isConnected || !provider.publicKey) throw new Error('Wallet not connected');
-    // Timeout after 180s to prevent infinite hang if popup blocked or user ignores.
-    // (60s was too aggressive for manual close flows; users often approve after a minute.)
-    return await withTimeout(provider.signTransaction(tx), 180_000, 'Phantom wallet approval timeout (180s)') as T;
+    // Timeout after 300s to prevent infinite hang if popup blocked or user ignores.
+    // Bumped from 180s → 300s after field data showed legitimate slow-approval flows.
+    try {
+      return await withTimeout(provider.signTransaction(tx), 300_000, 'Phantom wallet approval timeout (300s)') as T;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('timeout') || msg.includes('Timeout')) {
+        throw new Error(
+          'Wallet approval timed out. Check that the Phantom popup is visible — '
+          + 'it may be behind another window or blocked by your browser.',
+        );
+      }
+      throw err;
+    }
   }, []);
 
   const signAllTransactions = useCallback(async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
@@ -259,9 +270,9 @@ export function PhantomWalletProvider({ children }: { children: ReactNode }) {
     const fn: unknown = (provider as any).signMessage;
     if (typeof fn !== 'function') throw new Error('Phantom signMessage not available');
 
-    // Timeout after 180s to avoid indefinite hang if popup blocked/ignored.
+    // Timeout after 300s to avoid indefinite hang if popup blocked/ignored.
     const signed = Promise.resolve((fn as any).call(provider, message, 'utf8'));
-    const res = await withTimeout(signed, 180_000, 'Phantom message approval timeout (180s)') as any;
+    const res = await withTimeout(signed, 300_000, 'Phantom message approval timeout (300s)') as any;
 
     // Phantom may return { signature: Uint8Array } or Uint8Array directly.
     if (res instanceof Uint8Array) return res;

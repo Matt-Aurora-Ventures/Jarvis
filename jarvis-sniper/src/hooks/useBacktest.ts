@@ -326,7 +326,9 @@ export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBackt
           ? 'mixed'
           : 'unknown';
     const stage = stageForTrades(agg.totalTrades);
-    const underperformer = winRatePct < 40 || profitFactor < 1.0;
+    const underperformer =
+      profitFactor < 1.0 ||
+      (Number.isFinite(netPnlPct) && Number(netPnlPct) <= 0);
 
     return {
       strategyId,
@@ -336,7 +338,7 @@ export function buildPresetBacktestUpdates(rows: BacktestSummary[]): PresetBackt
       dataSource,
       underperformer,
       stage,
-      promotionEligible: stage === 'promotion' && !underperformer,
+      promotionEligible: stage === 'promotion',
       winRatePct,
       winRateLower95Pct,
       winRateUpper95Pct,
@@ -392,7 +394,16 @@ export function useBacktest() {
       if (res.ok) {
         const json = await res.json();
         const candidate = normalizeBacktestCloudRunUrl(json?.backend?.cloudRunTagUrl);
-        if (candidate) base = candidate;
+        if (candidate) {
+          // Only use the absolute Cloud Run URL when the browser is already on
+          // a *.a.run.app domain (i.e. direct Cloud Run access).  Custom domains
+          // like jarvislife.cloud must use relative paths to avoid CORS blocks.
+          const currentHost = window.location.hostname.toLowerCase();
+          if (currentHost.endsWith('.a.run.app')) {
+            base = candidate;
+          }
+          // Otherwise keep base = '' → relative paths → no CORS
+        }
       }
     } catch {
       // fall back to same-origin

@@ -1,6 +1,21 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { evidenceTradesToCsv, type BacktestEvidenceBundle } from './backtest-evidence';
+import { backtestStatusBucketName } from './backtest-run-status-store';
+
+let _gcsStorage: import('@google-cloud/storage').Storage | null = null;
+function gcs(): import('@google-cloud/storage').Storage {
+  if (!_gcsStorage) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Storage } = require('@google-cloud/storage') as typeof import('@google-cloud/storage');
+    _gcsStorage = new Storage();
+  }
+  return _gcsStorage;
+}
+
+function artifactGcsKey(runId: string, filename: string): string {
+  return `backtest/artifacts/${runId}/${filename}`;
+}
 
 /**
  * Persist backtest runs to disk for longer-lived research / tuning workflows.
@@ -93,8 +108,82 @@ export function persistBacktestArtifacts(bundle: BacktestEvidenceBundle): void {
     if (bundle.reportMd) {
       writeFileSync(join(dir, 'report.md'), bundle.reportMd, 'utf8');
     }
+
+    // Also persist to GCS so artifacts survive container restarts on Cloud Run.
+    void persistArtifactsToGcs(bundle).catch(() => {/* best-effort */});
   } catch {
     // best-effort
+  }
+}
+
+async function persistArtifactsToGcs(bundle: BacktestEvidenceBundle): Promise<void> {
+  const bucket = backtestStatusBucketName();
+  if (!bucket) return;
+
+  const files: Array<{ key: string; body: string; contentType: string }> = [
+    {
+      key: artifactGcsKey(bundle.runId, 'evidence.json'),
+      body: JSON.stringify(bundle, null, 2),
+      contentType: 'application/json',
+    },
+    {
+      key: artifactGcsKey(bundle.runId, 'manifest.json'),
+      body: JSON.stringify({
+        runId: bundle.runId,
+        generatedAt: bundle.generatedAt,
+        request: bundle.request,
+        meta: bundle.meta,
+        datasetCount: bundle.datasets.length,
+        tradeCount: bundle.trades.length,
+        datasets: bundle.datasets,
+        resultsSummary: bundle.resultsSummary,
+      }, null, 2),
+      contentType: 'application/json',
+    },
+    {
+      key: artifactGcsKey(bundle.runId, 'trades.csv'),
+      body: evidenceTradesToCsv(bundle),
+      contentType: 'text/csv',
+    },
+  ];
+
+  if (bundle.reportMd) {
+    files.push({
+      key: artifactGcsKey(bundle.runId, 'report.md'),
+      body: bundle.reportMd,
+      contentType: 'text/markdown',
+    });
+  }
+
+  await Promise.all(
+    files.map((f) =>
+      gcs().bucket(bucket).file(f.key).save(f.body, {
+        resumable: false,
+        contentType: f.contentType,
+        metadata: { cacheControl: 'no-store' },
+      }),
+    ),
+  );
+}
+
+/**
+ * Read a single artifact from GCS.  Falls back when local disk is empty
+ * (e.g. Cloud Run container restarted between write and read).
+ */
+export async function readArtifactFromGcs(
+  runId: string,
+  filename: string,
+): Promise<string | null> {
+  const bucket = backtestStatusBucketName();
+  if (!bucket) return null;
+  try {
+    const file = gcs().bucket(bucket).file(artifactGcsKey(runId, filename));
+    const [exists] = await file.exists();
+    if (!exists) return null;
+    const [buf] = await file.download();
+    return buf.toString('utf8');
+  } catch {
+    return null;
   }
 }
 
