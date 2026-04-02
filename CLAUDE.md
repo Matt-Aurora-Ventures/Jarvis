@@ -6,10 +6,10 @@ Jarvis is an autonomous LifeOS trading and AI assistant system running on Solana
 ## Key Directories
 - `core/` - Main Python modules (trading, bots, execution, risk management)
 - `bots/` - Bot implementations (Telegram, Twitter/X, Treasury, Buy Tracker)
-- `tg_bot/` - Telegram bot handlers and services
-- `api/` - API server and handlers
-- `web/` - Web interfaces (trading UI, system control deck)
-- `lifeos/config/` - Configuration files
+- `tg-bot/` - Telegram bot handlers and services
+- `services/api/` - API server and handlers
+- `services/web/` - Web interfaces (trading UI, system control deck)
+- `data/config/` - Configuration files
 - `scripts/` - Automation and utility scripts
 - `~/.lifeos/trading/` - Runtime state files
 
@@ -25,12 +25,12 @@ Jarvis is an autonomous LifeOS trading and AI assistant system running on Solana
 - `bots/twitter/x_claude_cli_handler.py` - X/Twitter CLI command handler
 - `bots/twitter/autonomous_engine.py` - Autonomous posting engine
 - `bots/buy_tracker/sentiment_report.py` - Sentiment analysis and reporting
-- `tg_bot/services/chat_responder.py` - Telegram chat handler
+- `tg-bot/services/chat_responder.py` - Telegram chat handler
 - `core/context_loader.py` - Shared Jarvis context/capabilities
 
 ## Active Configurations
 - Max positions: 50 (treasury/trading.py, position_manager.py)
-- Grok daily cost limit: $10 (tg_bot/config.py)
+- Grok daily cost limit: $10 (tg-bot/config.py)
 - X Bot circuit breaker: 60s min interval, 30min cooldown after 3 errors
 
 ## How to Execute Actions
@@ -74,7 +74,7 @@ python bots/supervisor.py
 ## Web Interfaces
 
 ### Trading Interface (Port 5001)
-**Location**: `web/trading_web.py`
+**Location**: `services/web/trading_web.py`
 **URL**: http://127.0.0.1:5001
 
 Web-based trading UI that mirrors the Telegram `/demo` interface:
@@ -90,12 +90,12 @@ Web-based trading UI that mirrors the Telegram `/demo` interface:
 
 **To Run**:
 ```bash
-cd web
+cd services/web
 python trading_web.py
 ```
 
 ### System Control Deck (Port 5000)
-**Location**: `web/task_web.py`
+**Location**: `services/web/task_web.py`
 **URL**: http://127.0.0.1:5000
 
 System-wide operations and monitoring:
@@ -108,7 +108,7 @@ System-wide operations and monitoring:
 
 **To Run**:
 ```bash
-cd web
+cd services/web
 python task_web.py
 ```
 

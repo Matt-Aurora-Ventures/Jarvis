@@ -54,10 +54,10 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: jarvis-sniper/package.json
+          cache-dependency-path: apps/jarvis-sniper/package.json
 
       - name: Install dependencies
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -67,7 +67,7 @@ jobs:
 
       - name: Write backtest env (real-data only)
         id: realdata
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         env:
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
           HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
@@ -139,7 +139,7 @@ jobs:
         id: preflight
         if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
         continue-on-error: true
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         run: |
           set +e
           npm test
@@ -161,13 +161,13 @@ jobs:
 
       - name: Run tuning pipeline
         if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         run: bash backtest-data/scripts/run_pipeline_ci.sh
 
       - name: Summarize strict gate
         id: gate
         if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         env:
           PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
         run: |
@@ -200,7 +200,7 @@ jobs:
 
       - name: Firebase preview deploy
         if: ${{ steps.realdata.outputs.skip_real_data != 'true' }}
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.home }}/.gcp/firebase-sa.json
         run: |
@@ -229,7 +229,7 @@ jobs:
             real-data
             auto-generated
           add-paths: |
-            jarvis-sniper/backtest-data/results/**
+            apps/jarvis-sniper/backtest-data/results/**
 
       - name: Loop redispatch (serial nonstop)
         if: ${{ success() && github.event_name != 'schedule' }}

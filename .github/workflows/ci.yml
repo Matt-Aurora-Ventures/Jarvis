@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
     env:
       PROD_AUDIT_HIGH_BASELINE: "19"
     steps:

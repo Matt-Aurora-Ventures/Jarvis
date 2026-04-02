@@ -23,7 +23,7 @@ jobs:
           node-version: "20"
 
       - name: Install dependencies
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -32,7 +32,7 @@ jobs:
           fi
 
       - name: Nightly full-family prewarm
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         continue-on-error: ${{ github.event_name == 'schedule' }}
         env:
           PREWARM_CANONICAL_ORIGIN: https://jarvislife.cloud
@@ -52,6 +52,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: prewarm-nightly-summary
-          path: jarvis-sniper/artifacts/ops/prewarm/*.json
+          path: apps/jarvis-sniper/artifacts/ops/prewarm/*.json
           if-no-files-found: ignore
           retention-days: 30

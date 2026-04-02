@@ -22,14 +22,14 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: jarvis-sniper/package-lock.json
+          cache-dependency-path: apps/jarvis-sniper/package-lock.json
 
       - name: Install dependencies
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         run: npm ci
 
       - name: Generate WR family calibration suggestions
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         env:
           WR_FAMILY_CALIBRATION_SOURCE: backtest-data/results/master_comparison.json
           WR_FAMILY_CALIBRATION_MIN_FAMILY_TRADES: "500"
@@ -40,6 +40,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wr-family-calibration
-          path: jarvis-sniper/artifacts/ops/wr-family-calibration/*
+          path: apps/jarvis-sniper/artifacts/ops/wr-family-calibration/*
           if-no-files-found: ignore
           retention-days: 30

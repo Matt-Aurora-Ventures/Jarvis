@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "jarvis-sniper/**"
+      - "apps/jarvis-sniper/**"
       - ".github/workflows/jarvis-sniper-firebase-deploy.yml"
 
 concurrency:
@@ -29,10 +29,10 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: jarvis-sniper/package.json
+          cache-dependency-path: apps/jarvis-sniper/package.json
 
       - name: Install
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -41,7 +41,7 @@ jobs:
           fi
 
       - name: Test
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         run: npm test
 
       - name: Auth (GCP Service Account)
@@ -59,7 +59,7 @@ jobs:
 
       - name: Deploy
         if: ${{ env.deploy_enabled == 'true' }}
-        working-directory: jarvis-sniper
+        working-directory: apps/jarvis-sniper
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.home }}/.gcp/firebase-sa.json
           NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
